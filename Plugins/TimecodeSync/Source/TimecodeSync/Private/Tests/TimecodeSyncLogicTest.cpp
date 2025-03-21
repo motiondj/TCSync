@@ -306,24 +306,36 @@ bool UTimecodeSyncLogicTest::TestSystemTimeSync()
     return bSuccess;
 }
 
-void UTimecodeSyncLogicTest::OnMasterMessageReceived(const FString& Timecode, ETimecodeMessageType MessageType)
+void UTimecodeSyncLogicTest::OnMasterMessageReceived(const FTimecodeNetworkMessage& Message)
 {
-    CurrentMasterTimecode = Timecode;
+    if (Message.MessageType == ETimecodeMessageType::TimecodeSync)
+    {
+        CurrentMasterTimecode = Message.Timecode;
+    }
 }
 
-void UTimecodeSyncLogicTest::OnSlaveMessageReceived(const FString& Timecode, ETimecodeMessageType MessageType)
+void UTimecodeSyncLogicTest::OnSlaveMessageReceived(const FTimecodeNetworkMessage& Message)
 {
-    CurrentSlaveTimecode = Timecode;
+    if (Message.MessageType == ETimecodeMessageType::TimecodeSync)
+    {
+        CurrentSlaveTimecode = Message.Timecode;
+    }
 }
 
-void UTimecodeSyncLogicTest::OnTestTimecodeReceived(const FString& Timecode, ETimecodeMessageType MessageType)
+void UTimecodeSyncLogicTest::OnTestTimecodeReceived(const FTimecodeNetworkMessage& Message)
 {
-    TestReceivedTimecode = Timecode;
+    if (Message.MessageType == ETimecodeMessageType::TimecodeSync)
+    {
+        TestReceivedTimecode = Message.Timecode;
+    }
 }
 
-void UTimecodeSyncLogicTest::OnSystemTimeReceived(const FString& Timecode, ETimecodeMessageType MessageType)
+void UTimecodeSyncLogicTest::OnSystemTimeReceived(const FTimecodeNetworkMessage& Message)
 {
-    SystemTimeReceivedTimecode = Timecode;
+    if (Message.MessageType == ETimecodeMessageType::TimecodeSync)
+    {
+        SystemTimeReceivedTimecode = Message.Timecode;
+    }
 }
 
 void UTimecodeSyncLogicTest::LogTestResult(const FString& TestName, bool bSuccess, const FString& Message)

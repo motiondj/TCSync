@@ -33,19 +33,19 @@ public:
 private:
     // Timecode message reception handler (Master)
     UFUNCTION()
-    void OnMasterMessageReceived(const FString& Timecode, ETimecodeMessageType MessageType);
+    void OnMasterMessageReceived(const FTimecodeNetworkMessage& Message);
 
     // Timecode message reception handler (Slave)
     UFUNCTION()
-    void OnSlaveMessageReceived(const FString& Timecode, ETimecodeMessageType MessageType);
+    void OnSlaveMessageReceived(const FTimecodeNetworkMessage& Message);
 
     // Multi-timecode test reception handler
     UFUNCTION()
-    void OnTestTimecodeReceived(const FString& Timecode, ETimecodeMessageType MessageType);
+    void OnTestTimecodeReceived(const FTimecodeNetworkMessage& Message);
 
     // System time test reception handler
     UFUNCTION()
-    void OnSystemTimeReceived(const FString& Timecode, ETimecodeMessageType MessageType);
+    void OnSystemTimeReceived(const FTimecodeNetworkMessage& Message);
 
     // Log helper function
     void LogTestResult(const FString& TestName, bool bSuccess, const FString& Message = TEXT(""));
