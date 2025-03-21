@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "TimecodeNetworkTypes.h"
 #include "TimecodeSettings.generated.h"
 
 /**
@@ -41,13 +42,17 @@ public:
 
     /** 역할 관련 설정 */
 
-    // 자동 역할 감지 사용 여부
+    // 역할 결정 모드
     UPROPERTY(config, EditAnywhere, Category = "Role")
-    bool bAutoDetectRole;
+    ETimecodeRoleMode RoleMode;
 
-    // 수동 설정 시 마스터 역할 여부
-    UPROPERTY(config, EditAnywhere, Category = "Role", meta = (EditCondition = "!bAutoDetectRole"))
-    bool bIsMaster;
+    // 수동 모드에서 마스터 역할 여부
+    UPROPERTY(config, EditAnywhere, Category = "Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual"))
+    bool bIsManualMaster;
+
+    // 수동 슬레이브 모드에서 마스터 IP 주소
+    UPROPERTY(config, EditAnywhere, Category = "Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual && !bIsManualMaster"))
+    FString MasterIPAddress;
 
     /** nDisplay 관련 설정 */
 
@@ -55,8 +60,35 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Integration")
     bool bEnableNDisplayIntegration;
 
+    // nDisplay 노드ID 기반 역할 결정 (자동 모드에서만 사용)
+    UPROPERTY(config, EditAnywhere, Category = "Integration", meta = (EditCondition = "bEnableNDisplayIntegration && RoleMode==ETimecodeRoleMode::Automatic"))
+    bool bUseNDisplayRoleAssignment;
+
+    /** 고급 설정 */
+
+    // 자동 시작 여부
+    UPROPERTY(config, EditAnywhere, Category = "Advanced")
+    bool bAutoStartTimecode;
+
+    // 패킷 손실 보정 활성화
+    UPROPERTY(config, EditAnywhere, Category = "Advanced")
+    bool bEnablePacketLossCompensation;
+
+    // 네트워크 지연 보정 활성화
+    UPROPERTY(config, EditAnywhere, Category = "Advanced")
+    bool bEnableNetworkLatencyCompensation;
+
+    // 연결 상태 확인 주기 (초 단위)
+    UPROPERTY(config, EditAnywhere, Category = "Advanced", meta = (ClampMin = "0.1", ClampMax = "10.0"))
+    float ConnectionCheckInterval;
+
 public:
     // UDeveloperSettings 인터페이스
     virtual FName GetCategoryName() const override;
-    virtual FText GetSectionDescription() const;
+    virtual FText GetSectionText() const override;
+    virtual FText GetSectionDescription() const override;
+
+#if WITH_EDITOR
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 };

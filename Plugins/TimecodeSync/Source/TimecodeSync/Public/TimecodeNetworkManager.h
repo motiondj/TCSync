@@ -78,6 +78,31 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnNetworkStateChanged OnNetworkStateChanged;
 
+    // 역할 모드 설정/조회 함수
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetRoleMode(ETimecodeRoleMode NewMode);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    ETimecodeRoleMode GetRoleMode() const;
+
+    // 수동 마스터 설정 함수
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetManualMaster(bool bInIsManuallyMaster);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool GetIsManuallyMaster() const;
+
+    // 마스터 IP 설정 함수 (수동 슬레이브 모드용)
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetMasterIPAddress(const FString& InMasterIP);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    FString GetMasterIPAddress() const;
+
+    // 역할 모드 변경 델리게이트
+    UPROPERTY(BlueprintAssignable, Category = "Network")
+    FRoleModeChangedDelegate OnRoleModeChanged;
+
 private:
     // UDP 소켓
     FSocket* Socket;
@@ -117,4 +142,19 @@ private:
 
     // 하트비트 메시지 전송
     void SendHeartbeat();
+
+    // 역할 모드 설정
+    ETimecodeRoleMode RoleMode;
+
+    // 수동 모드 마스터 여부
+    bool bIsManuallyMaster;
+
+    // 수동 마스터 IP 주소 (슬레이브 모드용)
+    FString MasterIPAddress;
+
+    // 자동 역할 감지 함수
+    bool AutoDetectRole();
+
+    // 자동 역할 감지 결과 플래그
+    bool bRoleAutomaticallyDetermined;
 };

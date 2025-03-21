@@ -14,6 +14,17 @@ enum class ETimecodeMessageType : uint8
     Command          // 명령 메시지
 };
 
+// 역할 결정 모드 열거형
+UENUM(BlueprintType)
+enum class ETimecodeRoleMode : uint8
+{
+    Automatic UMETA(DisplayName = "Automatic Detection"),
+    Manual    UMETA(DisplayName = "Manual Setting")
+};
+
+// 역할 모드 변경 이벤트를 위한 델리게이트
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRoleModeChangedDelegate, ETimecodeRoleMode, NewMode);
+
 // 네트워크로 전송되는 타임코드 메시지 구조체
 USTRUCT(BlueprintType)
 struct FTimecodeNetworkMessage
