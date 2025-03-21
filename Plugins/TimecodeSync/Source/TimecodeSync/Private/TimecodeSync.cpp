@@ -11,6 +11,19 @@ void FTimecodeSyncModule::StartupModule()
 
     // 설정 로드
     LoadSettings();
+
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSync module started, checking for tests..."));
+
+    // 테스트 검증을 위한 임시 코드
+    TArray<FAutomationTestInfo> TestInfos;
+    FAutomationTestFramework::Get().GetValidTestNames(TestInfos);
+    for (const FAutomationTestInfo& TestInfo : TestInfos)
+    {
+        if (TestInfo.GetDisplayName().Contains(TEXT("TimecodeSync")))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Found test: %s"), *TestInfo.GetDisplayName());
+        }
+    }
 }
 
 void FTimecodeSyncModule::ShutdownModule()

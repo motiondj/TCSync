@@ -27,5 +27,25 @@ public class TimecodeSync : ModuleRules
                 "DeveloperSettings"
             }
         );
+
+        // 테스트 관련 의존성 추가
+        if (Target.bBuildDeveloperTools || Target.Configuration != UnrealTargetConfiguration.Shipping)
+        {
+            PrivateDependencyModuleNames.AddRange(
+                new string[]
+                {
+                    "AutomationTest"
+                }
+            );
+        }
+
+        // Tests 폴더를 포함 경로에 추가
+        PrivateIncludePaths.AddRange(
+            new string[]
+            {
+                "TimecodeSync/Private",
+                "TimecodeSync/Private/Tests"
+            }
+        );
     }
 }

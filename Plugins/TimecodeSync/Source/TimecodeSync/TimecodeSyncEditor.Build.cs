@@ -30,5 +30,15 @@ public class TimecodeSyncEditor : ModuleRules
 				"TimecodeSync" // 런타임 모듈에 대한 종속성 추가
             }
 		);
-	}
+
+        if (Target.bBuildDeveloperTools || Target.Configuration != UnrealTargetConfiguration.Shipping)
+        {
+            PrivateDependencyModuleNames.AddRange(
+                new string[]
+                {
+            "AutomationTest"
+                }
+            );
+        }
+    }
 }
