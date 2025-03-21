@@ -49,7 +49,7 @@
   - ✅ UTimecodeNetworkManager 클래스 구현
   - ✅ 타임코드 생성 및 관리 로직 구현
   - ✅ 자동 역할 감지 시스템 구현
-  - ⚠️ 자동/수동 역할 모드 전환 시스템 구현 [신규]
+  - ✅ 자동/수동 역할 모드 전환 시스템 구현
   - ✅ 이벤트 시스템 구현 (타임코드 갱신, 역할 변경 등)
 
 - ✅ UDP 네트워크 통신 구현
@@ -57,7 +57,7 @@
   - ✅ 타임코드 패킷 구조 정의
   - ✅ 브로드캐스트 송신 로직 (Master 모드)
   - ✅ 패킷 수신 및 처리 로직 (Slave 모드)
-  - ⚠️ 수동 지정 IP에 대한 타겟 통신 구현 [신규]
+  - ✅ 수동 지정 IP에 대한 타겟 통신 구현
 
 - ✅ 모듈 초기화 클래스 구현
   - ✅ FTimecodeSyncModule 클래스 완성
@@ -86,13 +86,13 @@
 - ✅ 타임코드 컴포넌트 클래스 개발
   - ✅ UTimecodeComponent 액터 컴포넌트 구현
   - ✅ 프로퍼티 및 설정 노출 (블루프린트 에디터에서 접근 가능)
-  - ⚠️ 역할 모드 열거형(자동/수동) 및 관련 속성 추가 [신규]
+  - ✅ 역할 모드 열거형(자동/수동) 및 관련 속성 추가
   - ✅ BeginPlay/EndPlay 시 타임코드 매니저 연동
 
 - ✅ 블루프린트 노출 API 구현
   - ✅ StartTimecode, StopTimecode, ResetTimecode 함수 구현
   - ✅ GetCurrentTimecode 함수 구현
-  - ⚠️ SetRoleMode, SetManualMaster, SetMasterIPAddress 함수 구현 [신규]
+  - ✅ SetRoleMode, SetManualMaster, SetMasterIPAddress 함수 구현
   - ✅ 타임코드 이벤트 델리게이트 노출
 
 - ✅ 블루프린트 함수 라이브러리 구현
