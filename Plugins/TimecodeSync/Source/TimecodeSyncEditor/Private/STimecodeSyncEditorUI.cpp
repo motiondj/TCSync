@@ -12,11 +12,30 @@
 #include "Widgets/Input/SComboBox.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Input/SSpinBox.h"
+#include "Widgets/Input/SButton.h"
+#include "TimecodeUtils.h"
 
 #define LOCTEXT_NAMESPACE "STimecodeSyncEditorUI"
 
 void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
 {
+    // 프레임 레이트 옵션 초기화
+    FrameRateOptions.Add(MakeShareable(new FString("24.00")));
+    FrameRateOptions.Add(MakeShareable(new FString("25.00")));
+    FrameRateOptions.Add(MakeShareable(new FString("29.97")));
+    FrameRateOptions.Add(MakeShareable(new FString("30.00")));
+    FrameRateOptions.Add(MakeShareable(new FString("60.00")));
+
+    // 기본값 초기화
+    CurrentTimecode = TEXT("00:00:00:00");
+    ConnectionState = ENetworkConnectionState::Disconnected;
+    bIsMaster = false;
+    bIsRunning = false;
+    StatusMessage = FText::FromString(TEXT("Initializing..."));
+    TimecodeManager = nullptr;
+    DelegateHandler = nullptr;
+
     // Create main UI
     ChildSlot
         [
@@ -32,8 +51,8 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
                 ]
         ];
 
-    // Initialize UI
-    UpdateUI();
+    // 타임코드 매니저 초기화
+    InitializeTimecodeManager();
 
     // Register tick for periodic updates
     TickDelegateHandle = FTSTicker::GetCoreTicker().AddTicker(
@@ -48,6 +67,49 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
     );
 }
 
+STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
+{
+    // 타이머 중지
+    if (TickDelegateHandle.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(TickDelegateHandle);
+        TickDelegateHandle.Reset();
+    }
+
+    // 타임코드 매니저 종료
+    if (TimecodeManager.IsValid() || DelegateHandler.IsValid())
+    {
+        ShutdownTimecodeManager();
+    }
+}
+
+void STimecodeSyncEditorUI::ShutdownTimecodeManager()
+{
+    // 먼저 델리게이트 핸들러의 바인딩 해제
+    if (DelegateHandler.IsValid())
+    {
+        DelegateHandler->OnTimecodeMessageReceived.Unbind();
+        DelegateHandler->OnNetworkStateChanged.Unbind();
+    }
+    
+    // 타임코드 매니저의 델리게이트를 제거
+    if (TimecodeManager.IsValid() && DelegateHandler.IsValid())
+    {
+        TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler.Get());
+        TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler.Get());
+    }
+    
+    // 타임코드 매니저 종료
+    if (TimecodeManager.IsValid())
+    {
+        TimecodeManager->Shutdown();
+    }
+    
+    // 스마트 포인터 정리 - 순서 변경
+    TimecodeManager.Reset();
+    DelegateHandler.Reset();
+}
+
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
 {
     return SNew(SVerticalBox)
@@ -57,9 +119,15 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
         .AutoHeight()
         .Padding(0, 0, 0, 10)
         [
-            SNew(STextBlock)
-                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
-                .Text(LOCTEXT("TimecodeSyncTitle", "Timecode Sync Settings"))
+            SNew(SHorizontalBox)
+                + SHorizontalBox::Slot()
+                .AutoWidth()
+                .VAlign(VAlign_Center)
+                [
+                    SNew(STextBlock)
+                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+                        .Text(LOCTEXT("TimecodeSyncTitle", "Timecode Sync Settings"))
+                ]
         ]
 
         // Role settings section
@@ -70,24 +138,24 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
             CreateRoleSettingsSection()
         ]
 
-        // Network settings section
-        + SVerticalBox::Slot()
+    // Network settings section
+    + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
         [
             CreateNetworkSettingsSection()
         ]
 
-        // Timecode settings section
-        + SVerticalBox::Slot()
+    // Timecode settings section
+    + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
         [
             CreateTimecodeSettingsSection()
         ]
 
-        // Monitoring section
-        + SVerticalBox::Slot()
+    // Monitoring section
+    + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
         [
@@ -115,9 +183,15 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
                 [
-                    SNew(STextBlock)
-                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-                        .Text(LOCTEXT("RoleSettingsTitle", "Role Settings"))
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        [
+                            SNew(STextBlock)
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+                                .Text(LOCTEXT("RoleSettingsTitle", "Role Settings"))
+                        ]
                 ]
 
                 // Role mode selection
@@ -261,7 +335,6 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
 {
-    // Simple network settings section implementation
     return SNew(SBorder)
         .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
@@ -273,24 +346,128 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
                 [
-                    SNew(STextBlock)
-                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-                        .Text(LOCTEXT("NetworkSettingsTitle", "Network Settings"))
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        [
+                            SNew(STextBlock)
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+                                .Text(LOCTEXT("NetworkSettingsTitle", "Network Settings"))
+                        ]
                 ]
 
-                // Add network settings UI here (UDP port, multicast group, etc.)
+                // UDP Port
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
                 [
-                    SNew(SBox)
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("UDPPort", "UDP Port:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(SSpinBox<int32>)
+                                .MinValue(1024)
+                                .MaxValue(65535)
+                                .Value_Lambda([this]() -> int32 {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                return Settings ? Settings->DefaultUDPPort : 10000;
+                                    })
+                                .OnValueChanged_Lambda([this](int32 NewValue) {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                if (Settings) {
+                                    Settings->DefaultUDPPort = NewValue;
+                                    SaveSettings();
+                                }
+                                    })
+                        ]
+                ]
+
+                // Multicast Group
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("MulticastGroup", "Multicast Group:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(SEditableTextBox)
+                                .Text_Lambda([this]() -> FText {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                return FText::FromString(Settings ? Settings->MulticastGroupAddress : TEXT("239.0.0.1"));
+                                    })
+                                .OnTextCommitted_Lambda([this](const FText& NewText, ETextCommit::Type CommitType) {
+                                if (CommitType == ETextCommit::OnEnter || CommitType == ETextCommit::OnUserMovedFocus) {
+                                    UTimecodeSettings* Settings = GetTimecodeSettings();
+                                    if (Settings) {
+                                        Settings->MulticastGroupAddress = NewText.ToString();
+                                        SaveSettings();
+                                    }
+                                }
+                                    })
+                                .HintText(LOCTEXT("MulticastGroupHint", "Enter multicast group address (e.g., 239.0.0.1)"))
+                        ]
+                ]
+
+                // Broadcast Interval
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("SyncInterval", "Sync Interval (sec):"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(SSpinBox<float>)
+                                .MinValue(0.001f)
+                                .MaxValue(1.0f)
+                                .Delta(0.001f)
+                                .Value_Lambda([this]() -> float {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                return Settings ? Settings->BroadcastInterval : 0.033f;
+                                    })
+                                .OnValueChanged_Lambda([this](float NewValue) {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                if (Settings) {
+                                    Settings->BroadcastInterval = NewValue;
+                                    SaveSettings();
+                                }
+                                    })
+                        ]
                 ]
         ];
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateTimecodeSettingsSection()
 {
-    // Simple timecode settings section implementation
     return SNew(SBorder)
         .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
@@ -302,24 +479,132 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateTimecodeSettingsSection()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
                 [
-                    SNew(STextBlock)
-                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-                        .Text(LOCTEXT("TimecodeSettingsTitle", "Timecode Settings"))
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        [
+                            SNew(STextBlock)
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+                                .Text(LOCTEXT("TimecodeSettingsTitle", "Timecode Settings"))
+                        ]
                 ]
 
-                // Add timecode settings UI here (frame rate, drop frame, etc.)
+                // Frame Rate
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
                 [
-                    SNew(SBox)
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("FrameRate", "Frame Rate:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(SComboBox<TSharedPtr<FString>>)
+                                .OptionsSource(&FrameRateOptions)
+                                .OnGenerateWidget_Lambda([](TSharedPtr<FString> InOption) {
+                                return SNew(STextBlock).Text(FText::FromString(*InOption));
+                                    })
+                                .OnSelectionChanged_Lambda([this](TSharedPtr<FString> NewValue, ESelectInfo::Type SelectType) {
+                                if (NewValue.IsValid() && SelectType != ESelectInfo::Direct) {
+                                    UTimecodeSettings* Settings = GetTimecodeSettings();
+                                    if (Settings) {
+                                        Settings->FrameRate = FCString::Atof(**NewValue);
+                                        SaveSettings();
+                                    }
+                                }
+                                    })
+                                .Content()
+                                [
+                                    SNew(STextBlock)
+                                        .Text_Lambda([this]() -> FText {
+                                        UTimecodeSettings* Settings = GetTimecodeSettings();
+                                        return FText::FromString(FString::Printf(TEXT("%.2f"), Settings ? Settings->FrameRate : 30.0f));
+                                            })
+                                ]
+                        ]
+                ]
+
+                // Drop Frame Timecode
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("DropFrameTimecode", "Use Drop Frame:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        [
+                            SNew(SCheckBox)
+                                .IsChecked_Lambda([this]() -> ECheckBoxState {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                return Settings && Settings->bUseDropFrameTimecode ?
+                                    ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+                                    })
+                                .OnCheckStateChanged_Lambda([this](ECheckBoxState NewState) {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                if (Settings) {
+                                    Settings->bUseDropFrameTimecode = (NewState == ECheckBoxState::Checked);
+                                    SaveSettings();
+                                }
+                                    })
+                        ]
+                ]
+
+                // Auto Start Timecode
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("AutoStartTimecode", "Auto Start:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        [
+                            SNew(SCheckBox)
+                                .IsChecked_Lambda([this]() -> ECheckBoxState {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                return Settings && Settings->bAutoStartTimecode ?
+                                    ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+                                    })
+                                .OnCheckStateChanged_Lambda([this](ECheckBoxState NewState) {
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                if (Settings) {
+                                    Settings->bAutoStartTimecode = (NewState == ECheckBoxState::Checked);
+                                    SaveSettings();
+                                }
+                                    })
+                        ]
                 ]
         ];
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
 {
-    // Simple monitoring section implementation
     return SNew(SBorder)
         .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
@@ -331,24 +616,202 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
                 [
-                    SNew(STextBlock)
-                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-                        .Text(LOCTEXT("MonitoringSettingsTitle", "Monitoring"))
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        [
+                            SNew(STextBlock)
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+                                .Text(LOCTEXT("MonitoringTitle", "Monitoring"))
+                        ]
                 ]
 
-                // Add monitoring UI here (connection status, current timecode, etc.)
+                // Current Timecode
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
                 [
-                    SNew(SBox)
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("CurrentTimecode", "Current Timecode:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(STextBlock)
+                                .Text_Lambda([this]() -> FText {
+                                return FText::FromString(CurrentTimecode);
+                                    })
+                                .ColorAndOpacity(FSlateColor(FLinearColor(0.1f, 0.8f, 0.1f)))
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+                        ]
+                ]
+
+                // Connection Status
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("ConnectionStatus", "Connection Status:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(STextBlock)
+                                .Text_Lambda([this]() -> FText {
+                                return GetConnectionStateText();
+                                    })
+                                .ColorAndOpacity(GetConnectionStateColor())
+                        ]
+                ]
+
+                // Role Status
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("CurrentRole", "Current Role:"))
+                                .MinDesiredWidth(120)
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(STextBlock)
+                                .Text_Lambda([this]() -> FText {
+                                return FText::FromString(CurrentRole);
+                                    })
+                                .ColorAndOpacity_Lambda([this]() -> FSlateColor {
+                                return bIsMaster ?
+                                    FSlateColor(FLinearColor(0.8f, 0.2f, 0.2f)) : // Red for Master
+                                    FSlateColor(FLinearColor(0.2f, 0.2f, 0.8f));  // Blue for Slave
+                                    })
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+                        ]
+                ]
+
+                // Control Buttons
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 10)
+                [
+                    SNew(SHorizontalBox)
+
+                        // Start Button
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .Padding(0, 0, 5, 0)
+                        [
+                            SNew(SButton)
+                                .Text(LOCTEXT("StartTimecode", "Start"))
+                                .OnClicked_Lambda([this]() -> FReply {
+                                StartTimecode();
+                                return FReply::Handled();
+                                    })
+                        ]
+
+                        // Stop Button
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .Padding(5, 0)
+                        [
+                            SNew(SButton)
+                                .Text(LOCTEXT("StopTimecode", "Stop"))
+                                .OnClicked_Lambda([this]() -> FReply {
+                                StopTimecode();
+                                return FReply::Handled();
+                                    })
+                        ]
+
+                        // Reset Button
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .Padding(5, 0)
+                        [
+                            SNew(SButton)
+                                .Text(LOCTEXT("ResetTimecode", "Reset"))
+                                .OnClicked_Lambda([this]() -> FReply {
+                                ResetTimecode();
+                                return FReply::Handled();
+                                    })
+                        ]
+                ]
+
+                // Status Text
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(STextBlock)
+                        .Text_Lambda([this]() -> FText {
+                        return StatusMessage;
+                            })
+                        .ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
                 ]
         ];
 }
 
 void STimecodeSyncEditorUI::UpdateUI()
 {
-    // UI 업데이트
+    if (!TimecodeManager.IsValid())
+    {
+        CurrentTimecode = TEXT("--:--:--:--");
+        ConnectionState = ENetworkConnectionState::Disconnected;
+        bIsMaster = false;
+        return;
+    }
+
+    // Update connection state and role only when we have actual communication
+    bool bHasValidCommunication = TimecodeManager->HasReceivedValidMessage();
+    ConnectionState = bHasValidCommunication ? TimecodeManager->GetConnectionState() : ENetworkConnectionState::Disconnected;
+    
+    // Update role display
+    if (!bHasValidCommunication)
+    {
+        CurrentRole = TEXT("Determining...");
+    }
+    else
+    {
+        bIsMaster = TimecodeManager->IsMaster();
+        CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
+    }
+
+    // Update timecode display
+    if (!bHasValidCommunication)
+    {
+        CurrentTimecode = TEXT("--:--:--:--");
+    }
+    else
+    {
+        CurrentTimecode = TimecodeManager->GetCurrentTimecode();
+    }
+
+    // Update status message if needed
+    if (!bHasValidCommunication)
+    {
+        StatusMessage = FText::FromString(TEXT("Waiting for connection..."));
+    }
 }
 
 void STimecodeSyncEditorUI::OnRoleModeChanged(ETimecodeRoleMode NewMode)
@@ -358,6 +821,12 @@ void STimecodeSyncEditorUI::OnRoleModeChanged(ETimecodeRoleMode NewMode)
     {
         Settings->RoleMode = NewMode;
         SaveSettings();
+
+        // 타임코드 매니저에 역할 모드 변경 적용
+        if (TimecodeManager)
+        {
+            TimecodeManager->SetRoleMode(NewMode);
+        }
 
         // UI 업데이트
         UpdateUI();
@@ -371,6 +840,12 @@ void STimecodeSyncEditorUI::OnManualMasterChanged(bool bNewValue)
     {
         Settings->bIsManualMaster = bNewValue;
         SaveSettings();
+
+        // 타임코드 매니저에 마스터 설정 변경 적용
+        if (TimecodeManager)
+        {
+            TimecodeManager->SetManualMaster(bNewValue);
+        }
 
         // UI 업데이트
         UpdateUI();
@@ -386,6 +861,12 @@ void STimecodeSyncEditorUI::OnMasterIPCommitted(const FText& NewText, ETextCommi
         {
             Settings->MasterIPAddress = NewText.ToString();
             SaveSettings();
+
+            // 타임코드 매니저에 마스터 IP 변경 적용
+            if (TimecodeManager)
+            {
+                TimecodeManager->SetMasterIPAddress(Settings->MasterIPAddress);
+            }
         }
     }
 }
@@ -458,6 +939,119 @@ FText STimecodeSyncEditorUI::GetMasterIPText() const
         return FText::FromString(Settings->MasterIPAddress);
     }
     return FText::GetEmpty();
+}
+
+void STimecodeSyncEditorUI::InitializeTimecodeManager()
+{
+    // Create delegate handler
+    UTimecodeSyncEditorDelegateHandler* NewDelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
+    DelegateHandler = TSharedPtr<UTimecodeSyncEditorDelegateHandler>(NewDelegateHandler);
+    
+    // Create timecode manager
+    UTimecodeNetworkManager* NewTimecodeManager = NewObject<UTimecodeNetworkManager>();
+    TimecodeManager = TSharedPtr<UTimecodeNetworkManager>(NewTimecodeManager);
+    
+    // Set up callbacks
+    if (TimecodeManager.IsValid() && DelegateHandler.IsValid())
+    {
+        TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
+        TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
+        
+        // Connect delegate handler to UI
+        DelegateHandler->OnTimecodeMessageReceived.BindRaw(this, &STimecodeSyncEditorUI::OnTimecodeMessageReceived);
+        DelegateHandler->OnNetworkStateChanged.BindRaw(this, &STimecodeSyncEditorUI::OnNetworkStateChanged);
+    }
+}
+
+void STimecodeSyncEditorUI::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
+{
+    CurrentTimecode = Message.Timecode;
+}
+
+void STimecodeSyncEditorUI::OnNetworkStateChanged(ENetworkConnectionState NewState)
+{
+    // 네트워크 상태 변경 처리
+    ConnectionState = NewState;
+
+    switch (NewState)
+    {
+    case ENetworkConnectionState::Connected:
+        StatusMessage = FText::FromString(TEXT("Network connected"));
+        break;
+    case ENetworkConnectionState::Connecting:
+        StatusMessage = FText::FromString(TEXT("Network connecting..."));
+        break;
+    case ENetworkConnectionState::Disconnected:
+        StatusMessage = FText::FromString(TEXT("Network disconnected"));
+        break;
+    }
+}
+
+void STimecodeSyncEditorUI::StartTimecode()
+{
+    if (TimecodeManager && ConnectionState == ENetworkConnectionState::Connected)
+    {
+        bIsRunning = true;
+        StatusMessage = FText::FromString(TEXT("Timecode started"));
+
+        // 타임코드 시작 메시지 전송
+        TimecodeManager->SendTimecodeMessage(CurrentTimecode, ETimecodeMessageType::Command);
+    }
+    else
+    {
+        StatusMessage = FText::FromString(TEXT("Cannot start: Manager not initialized or disconnected"));
+    }
+}
+
+void STimecodeSyncEditorUI::StopTimecode()
+{
+    if (TimecodeManager && bIsRunning)
+    {
+        bIsRunning = false;
+        StatusMessage = FText::FromString(TEXT("Timecode stopped"));
+
+        // 타임코드 중지 메시지 전송
+        TimecodeManager->SendTimecodeMessage(CurrentTimecode, ETimecodeMessageType::Command);
+    }
+}
+
+void STimecodeSyncEditorUI::ResetTimecode()
+{
+    if (TimecodeManager)
+    {
+        // 타임코드 리셋
+        CurrentTimecode = TEXT("00:00:00:00");
+        StatusMessage = FText::FromString(TEXT("Timecode reset"));
+
+        // 타임코드 리셋 메시지 전송
+        TimecodeManager->SendTimecodeMessage(CurrentTimecode, ETimecodeMessageType::Command);
+    }
+}
+
+FText STimecodeSyncEditorUI::GetConnectionStateText() const
+{
+    switch (ConnectionState)
+    {
+        case ENetworkConnectionState::Connected:
+            return FText::FromString(TEXT("Connected"));
+        case ENetworkConnectionState::Disconnected:
+            return FText::FromString(TEXT("Waiting for connection..."));
+        default:
+            return FText::FromString(TEXT("Unknown"));
+    }
+}
+
+FSlateColor STimecodeSyncEditorUI::GetConnectionStateColor() const
+{
+    switch (ConnectionState)
+    {
+        case ENetworkConnectionState::Connected:
+            return FSlateColor(FLinearColor::Green);
+        case ENetworkConnectionState::Disconnected:
+            return FSlateColor(FLinearColor::Red);
+        default:
+            return FSlateColor(FLinearColor::Yellow);
+    }
 }
 
 #undef LOCTEXT_NAMESPACE

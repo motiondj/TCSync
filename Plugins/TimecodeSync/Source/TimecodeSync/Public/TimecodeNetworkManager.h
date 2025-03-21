@@ -30,6 +30,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeMessageReceived, const FT
 // Network state change delegate
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkStateChanged, ENetworkConnectionState, NewState);
 
+// Message received delegate
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMessageReceived, const FTimecodeNetworkMessage&, Message);
+
 /**
  * Timecode network manager class
  */
@@ -72,7 +75,7 @@ public:
 
     // Timecode message receive delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
-    FOnTimecodeMessageReceived OnMessageReceived;
+    FOnTimecodeMessageReceived OnTimecodeMessageReceived;
 
     // Network state change delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
@@ -102,6 +105,21 @@ public:
     // Role mode change delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FRoleModeChangedDelegate OnRoleModeChanged;
+
+    // Network state functions
+    bool HasReceivedValidMessage() const { return bHasReceivedValidMessage; }
+
+    // Get current timecode
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    FString GetCurrentTimecode() const;
+
+    // Check if master
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool IsMaster() const;
+
+    // Message received delegate
+    UPROPERTY(BlueprintAssignable, Category = "Network")
+    FOnMessageReceived OnMessageReceived;
 
 private:
     // UDP socket
@@ -157,4 +175,7 @@ private:
 
     // Auto role detection result flag
     bool bRoleAutomaticallyDetermined;
+
+    // Network state tracking
+    bool bHasReceivedValidMessage = false;
 };

@@ -46,18 +46,24 @@ void FTimecodeSyncEditorModule::ShutdownModule()
 {
     UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module shutting down"));
 
+    // Unregister tab spawner first
+    FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TimecodeSyncTabId);
+
     // Unregister menus
     UToolMenus::UnRegisterStartupCallback(this);
     UToolMenus::UnregisterOwner(this);
 
-    // Clean up styles
-    FTimecodeSyncEditorStyle::Shutdown();
+    // Clean up command list
+    if (FTimecodeSyncEditorCommands::Get().CommandList.IsValid())
+    {
+        FTimecodeSyncEditorCommands::Get().CommandList.Reset();
+    }
 
     // Unregister commands
     FTimecodeSyncEditorCommands::Unregister();
 
-    // Unregister tab spawner
-    FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TimecodeSyncTabId);
+    // Clean up styles last
+    FTimecodeSyncEditorStyle::Shutdown();
 
     UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module shut down successfully"));
 }
@@ -104,11 +110,10 @@ void FTimecodeSyncEditorModule::RegisterMenus()
 
         // Add toolbar button
         FToolMenuEntry& Entry = ToolbarSection.AddEntry(
-            FToolMenuEntry::InitToolBarButton(
+            FToolMenuEntry::InitMenuEntry(
                 FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
                 LOCTEXT("TimecodeSyncToolbarButton", "Timecode"),
-                LOCTEXT("TimecodeSyncToolbarTooltip", "Opens the Timecode Sync panel"),
-                FSlateIcon(FTimecodeSyncEditorStyle::GetStyleSetName(), "TimecodeSyncEditor.OpenTimecodeSyncUI.Small")
+                LOCTEXT("TimecodeSyncToolbarTooltip", "Opens the Timecode Sync panel")
             )
         );
 

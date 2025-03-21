@@ -1,60 +1,72 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
-#include "TimecodeSettings.h"
 #include "TimecodeNetworkTypes.h"
-#include "HAL/PlatformTLS.h"
+#include "TimecodeSettings.h"
+#include "Widgets/Input/SSpinBox.h"
+#include "TimecodeUtils.h"
+#include "TimecodeNetworkManager.h"
+#include "TimecodeSyncEditorDelegateHandler.h"
 
-/**
- * Editor UI for timecode synchronization settings
- */
-class STimecodeSyncEditorUI : public SCompoundWidget
+class UTimecodeNetworkManager;
+class UTimecodeSyncEditorDelegateHandler;
+
+class TIMECODESYNCEDITOR_API STimecodeSyncEditorUI : public SCompoundWidget
 {
 public:
-    SLATE_BEGIN_ARGS(STimecodeSyncEditorUI) {}
+    SLATE_BEGIN_ARGS(STimecodeSyncEditorUI)
+    {}
     SLATE_END_ARGS()
 
     void Construct(const FArguments& InArgs);
+    ~STimecodeSyncEditorUI();
 
 private:
-    // UI content creation functions
     TSharedRef<SWidget> CreateContentArea();
-
-    // Role settings section creation function
     TSharedRef<SWidget> CreateRoleSettingsSection();
-
-    // Network settings section creation function
     TSharedRef<SWidget> CreateNetworkSettingsSection();
-
-    // Timecode settings section creation function
     TSharedRef<SWidget> CreateTimecodeSettingsSection();
-
-    // Status monitoring section creation function
     TSharedRef<SWidget> CreateMonitoringSection();
 
-    // UI update function
     void UpdateUI();
-
-    // Callback functions
-    void OnRoleModeChanged(ETimecodeRoleMode NewMode);
-    void OnManualMasterChanged(bool bNewValue);
-    void OnMasterIPAddressChanged(const FText& NewText, ETextCommit::Type CommitType);
-    void OnMasterIPCommitted(const FText& NewText, ETextCommit::Type CommitType);
-
-    // Settings related functions
     UTimecodeSettings* GetTimecodeSettings() const;
     void SaveSettings();
-
-    // Get role mode text
+    void OnRoleModeChanged(ETimecodeRoleMode NewMode);
+    void OnManualMasterChanged(bool bNewValue);
+    void OnMasterIPCommitted(const FText& NewText, ETextCommit::Type CommitType);
     FText GetRoleModeText() const;
     FText GetManualRoleText() const;
     FText GetMasterIPText() const;
-
-    // Visibility for automatic/manual detail sections
     EVisibility GetManualRoleSettingsVisibility() const;
     EVisibility GetManualSlaveSettingsVisibility() const;
 
-    // Timer handle
+    // Timecode control functions
+    void StartTimecode();
+    void StopTimecode();
+    void ResetTimecode();
+
+    // Member variables
     FTSTicker::FDelegateHandle TickDelegateHandle;
-};
+    TArray<TSharedPtr<FText>> RoleModeOptions;
+    TArray<TSharedPtr<FString>> FrameRateOptions;
+    
+    // State variables
+    FString CurrentTimecode;
+    ENetworkConnectionState ConnectionState;
+    bool bIsMaster;
+    bool bIsRunning;
+    FText StatusMessage;
+
+    // Network manager and delegate handler
+    TSharedPtr<UTimecodeNetworkManager> TimecodeManager;
+    TSharedPtr<UTimecodeSyncEditorDelegateHandler> DelegateHandler;
+
+    // Event handlers
+    void OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message);
+    void OnNetworkStateChanged(ENetworkConnectionState NewState);
+
+    // Timecode management functions
+    void InitializeTimecodeManager();
+    void ShutdownTimecodeManager();
+}; 

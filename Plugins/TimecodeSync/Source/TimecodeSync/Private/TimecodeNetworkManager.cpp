@@ -25,6 +25,7 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , bIsManuallyMaster(false)
     , MasterIPAddress(TEXT(""))
     , bRoleAutomaticallyDetermined(true)
+    , bHasReceivedValidMessage(false)
 {
     // Basic initialization complete
     UE_LOG(LogTimecodeNetwork, Verbose, TEXT("TimecodeNetworkManager created with ID: %s"), *InstanceID);
@@ -83,6 +84,9 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 
 void UTimecodeNetworkManager::Shutdown()
 {
+    // 연결 상태 초기화
+    bHasReceivedValidMessage = false;
+
     // Stop reception
     if (Receiver != nullptr)
     {
@@ -481,108 +485,43 @@ bool UTimecodeNetworkManager::CreateSocket()
     return true;
 }
 
-void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& DataPtr, const FIPv4Endpoint& Endpoint)
+void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& ArrayReaderPtr, const FIPv4Endpoint& EndPt)
 {
-    if (!DataPtr.IsValid() || DataPtr->Num() == 0)
-    {
+    if (!ArrayReaderPtr.IsValid())
         return;
-    }
 
-    // Convert data to TArray<uint8>
-    TArray<uint8> ReceivedData;
-    ReceivedData.Append(DataPtr->GetData(), DataPtr->Num());
+    // 메시지 역직렬화
+    FTimecodeNetworkMessage ReceivedMessage;
+    if (ReceivedMessage.Deserialize(*ArrayReaderPtr))
+    {
+        // 유효한 메시지를 받았음을 표시
+        bHasReceivedValidMessage = true;
 
-    // Deserialize message
-    FTimecodeNetworkMessage Message;
-    if (Message.Deserialize(ReceivedData))
-    {
-        // Process message only if sender is not self
-        if (Message.SenderID != InstanceID)
-        {
-            // Process message
-            ProcessMessage(Message);
-            // Message received notification
-            OnMessageReceived.Broadcast(Message);
-        }
-    }
-    else
-    {
-        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Failed to deserialize received message from %s"), *Endpoint.ToString());
+        // 메시지 처리
+        ProcessMessage(ReceivedMessage);
+        OnMessageReceived.Broadcast(ReceivedMessage);
     }
 }
 
 void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Message)
 {
-    // Convert message type to string
-    FString MessageTypeStr = UEnum::GetValueAsString(Message.MessageType);
-
+    // 메시지 타입에 따른 처리
     switch (Message.MessageType)
     {
-    case ETimecodeMessageType::Heartbeat:
-        // Process heartbeat
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Received heartbeat (%s) from %s"), *MessageTypeStr, *Message.SenderID);
-        break;
+        case ETimecodeMessageType::TimecodeSync:
+            // 타임코드 메시지 브로드캐스트
+            OnTimecodeMessageReceived.Broadcast(Message);
+            bHasReceivedValidMessage = true;
+            break;
 
-    case ETimecodeMessageType::TimecodeSync:
-        // Process timecode synchronization
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Received timecode (%s): %s from %s"), *MessageTypeStr, *Message.Timecode, *Message.SenderID);
-        break;
+        case ETimecodeMessageType::Event:
+            // 이벤트 메시지 처리
+            UE_LOG(LogTimecodeNetwork, Log, TEXT("Received event: %s at %s"), *Message.Data, *Message.Timecode);
+            break;
 
-    case ETimecodeMessageType::RoleAssignment:
-        // Process role assignment
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Received role assignment (%s): %s from %s"), *MessageTypeStr, *Message.Data, *Message.SenderID);
-
-        // Process external assignment only in automatic mode
-        if (RoleMode == ETimecodeRoleMode::Automatic)
-        {
-            if (Message.Data.Equals(TEXT("MASTER"), ESearchCase::IgnoreCase))
-            {
-                if (!bIsMasterMode)
-                {
-                    UE_LOG(LogTimecodeNetwork, Log, TEXT("Role changed to MASTER by external assignment"));
-                    bool bOldMasterMode = bIsMasterMode;
-                    bIsMasterMode = true;
-
-                    if (Socket != nullptr)
-                    {
-                        int32 OldPort = PortNumber;
-                        Shutdown();
-                        Initialize(bIsMasterMode, OldPort);
-                    }
-                }
-            }
-            else if (Message.Data.Equals(TEXT("SLAVE"), ESearchCase::IgnoreCase))
-            {
-                if (bIsMasterMode)
-                {
-                    UE_LOG(LogTimecodeNetwork, Log, TEXT("Role changed to SLAVE by external assignment"));
-                    bool bOldMasterMode = bIsMasterMode;
-                    bIsMasterMode = false;
-
-                    if (Socket != nullptr)
-                    {
-                        int32 OldPort = PortNumber;
-                        Shutdown();
-                        Initialize(bIsMasterMode, OldPort);
-                    }
-                }
-            }
-        }
-        break;
-
-    case ETimecodeMessageType::Event:
-        // Process event
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Received event (%s): %s at %s from %s"), *MessageTypeStr, *Message.Data, *Message.Timecode, *Message.SenderID);
-        break;
-
-    case ETimecodeMessageType::Command:
-        // Process command
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Received command (%s): %s from %s"), *MessageTypeStr, *Message.Data, *Message.SenderID);
-        break;
-
-    default:
-        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Received unknown message type (%d) from %s"), static_cast<int32>(Message.MessageType), *Message.SenderID);
-        break;
+        default:
+            UE_LOG(LogTimecodeNetwork, Warning, TEXT("Unknown message type received"));
+            break;
     }
 }
 
@@ -647,4 +586,15 @@ bool UTimecodeNetworkManager::AutoDetectRole()
     // Default to SLAVE if IP cannot be obtained
     UE_LOG(LogTimecodeNetwork, Warning, TEXT("Could not determine local IP address, defaulting to SLAVE"));
     return false;
+}
+
+FString UTimecodeNetworkManager::GetCurrentTimecode() const
+{
+    // 현재 타임코드 반환 (실제 구현에서는 적절한 타임코드 값을 반환해야 함)
+    return TEXT("00:00:00:00");
+}
+
+bool UTimecodeNetworkManager::IsMaster() const
+{
+    return bIsMasterMode;
 }

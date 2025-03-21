@@ -16,9 +16,9 @@ void FTimecodeSyncEditorCommands::RegisterCommands()
 {
     UI_COMMAND(
         OpenTimecodeSyncUI,
-        "Timecode Sync",
+        "Timecode",
         "Open the Timecode Sync panel",
-        EUserInterfaceActionType::Button,
+        EUserInterfaceActionType::ToggleButton,
         FInputChord());
 }
 
