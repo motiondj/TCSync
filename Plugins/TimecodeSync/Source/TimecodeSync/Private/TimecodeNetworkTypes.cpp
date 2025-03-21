@@ -39,9 +39,9 @@ TArray<uint8> FTimecodeNetworkMessage::Serialize() const
     return Result;
 }
 
-bool FTimecodeNetworkMessage::Deserialize(const TArray<uint8>& Data)
+bool FTimecodeNetworkMessage::Deserialize(const TArray<uint8>& InData)
 {
-    if (Data.Num() < 1 + 2 + 2 + sizeof(double) + 2)
+    if (InData.Num() < 1 + 2 + 2 + sizeof(double) + 2)
     {
         return false; // 데이터가 너무 짧음
     }
@@ -49,44 +49,44 @@ bool FTimecodeNetworkMessage::Deserialize(const TArray<uint8>& Data)
     int32 Offset = 0;
 
     // 메시지 타입 역직렬화
-    MessageType = static_cast<ETimecodeMessageType>(Data[Offset++]);
+    MessageType = static_cast<ETimecodeMessageType>(InData[Offset++]);
 
     // 타임코드 역직렬화
-    uint16 TimecodeLength = Data[Offset] | (Data[Offset + 1] << 8);
+    uint16 TimecodeLength = InData[Offset] | (InData[Offset + 1] << 8);
     Offset += 2;
-    if (Offset + TimecodeLength > Data.Num())
+    if (Offset + TimecodeLength > InData.Num())
     {
         return false; // 데이터가 충분하지 않음
     }
-    Timecode = FString(UTF8_TO_TCHAR(&Data[Offset]));
+    Timecode = FString(UTF8_TO_TCHAR(&InData[Offset]));
     Offset += TimecodeLength;
 
     // 데이터 역직렬화
-    uint16 DataLength = Data[Offset] | (Data[Offset + 1] << 8);
+    uint16 DataLength = InData[Offset] | (InData[Offset + 1] << 8);
     Offset += 2;
-    if (Offset + DataLength > Data.Num())
+    if (Offset + DataLength > InData.Num())
     {
         return false; // 데이터가 충분하지 않음
     }
-    this->Data = FString(UTF8_TO_TCHAR(&Data[Offset]));
+    this->Data = FString(UTF8_TO_TCHAR(&InData[Offset]));
     Offset += DataLength;
 
     // 타임스탬프 역직렬화
-    if (Offset + sizeof(double) > Data.Num())
+    if (Offset + sizeof(double) > InData.Num())
     {
         return false; // 데이터가 충분하지 않음
     }
-    FMemory::Memcpy(&Timestamp, &Data[Offset], sizeof(double));
+    FMemory::Memcpy(&Timestamp, &InData[Offset], sizeof(double));
     Offset += sizeof(double);
 
     // 송신자 ID 역직렬화
-    uint16 SenderIDLength = Data[Offset] | (Data[Offset + 1] << 8);
+    uint16 SenderIDLength = InData[Offset] | (InData[Offset + 1] << 8);
     Offset += 2;
-    if (Offset + SenderIDLength > Data.Num())
+    if (Offset + SenderIDLength > InData.Num())
     {
         return false; // 데이터가 충분하지 않음
     }
-    SenderID = FString(UTF8_TO_TCHAR(&Data[Offset]));
+    SenderID = FString(UTF8_TO_TCHAR(&InData[Offset]));
 
     return true;
 }

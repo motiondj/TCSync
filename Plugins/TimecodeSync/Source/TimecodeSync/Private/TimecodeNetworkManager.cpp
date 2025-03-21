@@ -2,9 +2,12 @@
 #include "SocketSubsystem.h"
 #include "Sockets.h"
 #include "Common/UdpSocketReceiver.h"
-#include "Interfaces/IPv4/IPv4Address.h"
+#include "Common/UdpSocketBuilder.h"
+#include "Networking.h"
+#include "IPAddress.h"
 #include "Misc/Guid.h"
 #include "HAL/RunnableThread.h"
+#include "Serialization/ArrayReader.h"
 
 UTimecodeNetworkManager::UTimecodeNetworkManager()
     : Socket(nullptr)
@@ -15,7 +18,7 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , MulticastGroupAddress(TEXT("239.0.0.1"))
     , bIsMasterMode(false)
 {
-    // °íÀ¯ ÀÎ½ºÅÏ½º ID »ı¼º
+    // ì„ì˜ì˜ ê³ ìœ  ID ìƒì„±
     InstanceID = FGuid::NewGuid().ToString();
 }
 
@@ -26,7 +29,7 @@ UTimecodeNetworkManager::~UTimecodeNetworkManager()
 
 bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 {
-    // ÀÌ¹Ì ÃÊ±âÈ­µÈ °æ¿ì Á¾·á
+    // ì´ë¯¸ ì´ˆê¸°í™”ëœ ê²½ìš° ì¢…ë£Œ
     if (Socket != nullptr || Receiver != nullptr)
     {
         Shutdown();
@@ -35,20 +38,20 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
     bIsMasterMode = bIsMaster;
     PortNumber = Port;
 
-    // ¼ÒÄÏ »ı¼º
+    // ì†Œì¼“ ìƒì„±
     if (!CreateSocket())
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create UDP socket"));
         return false;
     }
 
-    // UDP ¼ö½Å±â »ı¼º
+    // UDP ìˆ˜ì‹  ì„¤ì •
     FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(100);
     Receiver = new FUdpSocketReceiver(Socket, ThreadWaitTime, TEXT("TimecodeReceiver"));
     Receiver->OnDataReceived().BindUObject(this, &UTimecodeNetworkManager::OnUDPReceived);
     Receiver->Start();
 
-    // ¿¬°á »óÅÂ º¯°æ
+    // ì—°ê²° ìƒíƒœ ì„¤ì •
     SetConnectionState(ENetworkConnectionState::Connected);
 
     UE_LOG(LogTemp, Log, TEXT("Network manager initialized in %s mode"), bIsMaster ? TEXT("Master") : TEXT("Slave"));
@@ -57,7 +60,7 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 
 void UTimecodeNetworkManager::Shutdown()
 {
-    // ¼ö½Å±â Á¾·á
+    // ìˆ˜ì‹  ì¤‘ì§€
     if (Receiver != nullptr)
     {
         Receiver->Stop();
@@ -65,7 +68,7 @@ void UTimecodeNetworkManager::Shutdown()
         Receiver = nullptr;
     }
 
-    // ¼ÒÄÏ Á¾·á
+    // ì†Œì¼“ ì¢…ë£Œ
     if (Socket != nullptr)
     {
         ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
@@ -73,7 +76,7 @@ void UTimecodeNetworkManager::Shutdown()
         Socket = nullptr;
     }
 
-    // ¿¬°á »óÅÂ º¯°æ
+    // ì—°ê²° ìƒíƒœ ì„¤ì •
     SetConnectionState(ENetworkConnectionState::Disconnected);
 
     UE_LOG(LogTemp, Log, TEXT("Network manager shutdown"));
@@ -86,22 +89,21 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
         return false;
     }
 
-    // ¸Ş½ÃÁö »ı¼º
+    // ë©”ì‹œì§€ ì§ë ¬í™”
     FTimecodeNetworkMessage Message;
     Message.MessageType = MessageType;
     Message.Timecode = Timecode;
     Message.Timestamp = FPlatformTime::Seconds();
     Message.SenderID = InstanceID;
 
-    // ¸Ş½ÃÁö Á÷·ÄÈ­
+    // ë©”ì‹œì§€ ì§ë ¬í™”
     TArray<uint8> MessageData = Message.Serialize();
 
-    // ¸Ş½ÃÁö Àü¼Û
+    // ë©”ì‹œì§€ ì „ì†¡
     int32 BytesSent = 0;
-
     if (!TargetIPAddress.IsEmpty())
     {
-        // À¯´ÏÄ³½ºÆ® Àü¼Û
+        // ë‹¨ì¼ ëŒ€ìƒ IP ì „ì†¡
         TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         TargetAddr->SetIp(*TargetIPAddress, bIsValid);
@@ -116,7 +118,7 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
     }
     else if (!MulticastGroupAddress.IsEmpty())
     {
-        // ¸ÖÆ¼Ä³½ºÆ® Àü¼Û
+        // ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ì „ì†¡
         TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
@@ -145,7 +147,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
         return false;
     }
 
-    // ¸Ş½ÃÁö »ı¼º
+    // ë©”ì‹œì§€ ì§ë ¬í™”
     FTimecodeNetworkMessage Message;
     Message.MessageType = ETimecodeMessageType::Event;
     Message.Timecode = Timecode;
@@ -153,15 +155,14 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
     Message.Timestamp = FPlatformTime::Seconds();
     Message.SenderID = InstanceID;
 
-    // ¸Ş½ÃÁö Á÷·ÄÈ­
+    // ë©”ì‹œì§€ ì§ë ¬í™”
     TArray<uint8> MessageData = Message.Serialize();
 
-    // ¸Ş½ÃÁö Àü¼Û (À¯´ÏÄ³½ºÆ® ¶Ç´Â ¸ÖÆ¼Ä³½ºÆ®)
+    // ë©”ì‹œì§€ ì „ì†¡ (ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ë˜ëŠ” ë‹¨ì¼ ëŒ€ìƒ IP ì„ íƒ)
     int32 BytesSent = 0;
-
     if (!MulticastGroupAddress.IsEmpty())
     {
-        // ¸ÖÆ¼Ä³½ºÆ® Àü¼Û
+        // ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ì „ì†¡
         TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
@@ -176,7 +177,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
     }
     else if (!TargetIPAddress.IsEmpty())
     {
-        // À¯´ÏÄ³½ºÆ® Àü¼Û
+        // ë‹¨ì¼ ëŒ€ìƒ IP ì „ì†¡
         TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         TargetAddr->SetIp(*TargetIPAddress, bIsValid);
@@ -240,31 +241,31 @@ ENetworkConnectionState UTimecodeNetworkManager::GetConnectionState() const
 
 void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& DataPtr, const FIPv4Endpoint& Endpoint)
 {
-    if (!DataPtr.IsValid())
+    if (!DataPtr.IsValid() || DataPtr->Num() == 0)
     {
         return;
     }
 
+    // ë°ì´í„°ë¥¼ TArray<uint8>ë¡œ ë³€í™˜
     TArray<uint8> ReceivedData;
     ReceivedData.Append(DataPtr->GetData(), DataPtr->Num());
 
-    // ¸Ş½ÃÁö ¿ªÁ÷·ÄÈ­
+    // ë©”ì‹œì§€ ì—­ì§ë ¬í™”
     FTimecodeNetworkMessage Message;
     if (Message.Deserialize(ReceivedData))
     {
-        // ÀÚ½ÅÀÌ º¸³½ ¸Ş½ÃÁö´Â ¹«½Ã
+        // ìˆ˜ì‹ ëœ ë©”ì‹œì§€ì˜ ë°œì‹ ìê°€ ìì‹ ì´ ì•„ë‹Œ ê²½ìš°ì—ë§Œ ì²˜ë¦¬
         if (Message.SenderID != InstanceID)
         {
-            // ¸Ş½ÃÁö Ã³¸®
+            // ë©”ì‹œì§€ ì²˜ë¦¬
             ProcessMessage(Message);
-
-            // ÀÌº¥Æ® ¹ß»ı
+            // ë©”ì‹œì§€ ìˆ˜ì‹  ì•Œë¦¼
             OnMessageReceived.Broadcast(Message);
         }
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Failed to deserialize received message"));
+        UE_LOG(LogTemp, Warning, TEXT("Failed to deserialize received message from %s"), *Endpoint.ToString());
     }
 }
 
@@ -277,7 +278,7 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // UDP ¼ÒÄÏ »ı¼º
+    // UDP ì†Œì¼“ ìƒì„±
     Socket = SocketSubsystem->CreateSocket(NAME_DGram, TEXT("TimecodeSocket"), true);
     if (Socket == nullptr)
     {
@@ -285,15 +286,15 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // ¼ÒÄÏ ¼³Á¤
+    // ì†Œì¼“ ì„¤ì •
     Socket->SetReuseAddr();
     Socket->SetRecvErr();
     Socket->SetNonBlocking();
 
-    // ºê·ÎµåÄ³½ºÆ® Çã¿ë
+    // ë¸Œë¡œë“œìºìŠ¤íŠ¸ ì„¤ì •
     Socket->SetBroadcast();
 
-    // ¼ÒÄÏ ¹ÙÀÎµù
+    // ë¡œì»¬ ì£¼ì†Œ ì„¤ì •
     TSharedRef<FInternetAddr> LocalAddr = SocketSubsystem->CreateInternetAddr();
     LocalAddr->SetAnyAddress();
     LocalAddr->SetPort(PortNumber);
@@ -312,33 +313,33 @@ bool UTimecodeNetworkManager::CreateSocket()
 
 void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Message)
 {
-    // ETimecodeMessageTypeÀ» int32·Î ¸í½ÃÀû º¯È¯
+    // ETimecodeMessageType? int32? ???? ????
     int32 MessageTypeInt = static_cast<int32>(Message.MessageType);
 
     switch (Message.MessageType)
     {
     case ETimecodeMessageType::Heartbeat:
-        // ÇÏÆ®ºñÆ® Ã³¸®
+        // ???? ????
         UE_LOG(LogTemp, Verbose, TEXT("Received heartbeat (type: %d) from %s"), MessageTypeInt, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::TimecodeSync:
-        // Å¸ÀÓÄÚµå µ¿±âÈ­ Ã³¸®
+        // ???? ??? ????
         UE_LOG(LogTemp, Verbose, TEXT("Received timecode (type: %d): %s from %s"), MessageTypeInt, *Message.Timecode, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::RoleAssignment:
-        // ¿ªÇÒ ÇÒ´ç Ã³¸®
+        // ?? ?? ????
         UE_LOG(LogTemp, Log, TEXT("Received role assignment (type: %d): %s from %s"), MessageTypeInt, *Message.Data, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::Event:
-        // ÀÌº¥Æ® Ã³¸®
+        // ??? ????
         UE_LOG(LogTemp, Log, TEXT("Received event (type: %d): %s at %s from %s"), MessageTypeInt, *Message.Data, *Message.Timecode, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::Command:
-        // ¸í·É Ã³¸®
+        // ?? ????
         UE_LOG(LogTemp, Log, TEXT("Received command (type: %d): %s from %s"), MessageTypeInt, *Message.Data, *Message.SenderID);
         break;
 

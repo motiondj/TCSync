@@ -1,21 +1,21 @@
-#pragma once
+ï»¿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "TimecodeNetworkManager.h"
 #include "TimecodeComponent.generated.h"
 
-// Å¸ÀÓÄÚµå º¯°æ ÀÌº¥Æ®¸¦ À§ÇÑ µ¨¸®°ÔÀÌÆ® ¼±¾ğ
+// íƒ€ì„ì½”ë“œ ë³€ê²½ ì´ë²¤íŠ¸ë¥¼ ìœ„í•œ ë¸ë¦¬ê²Œì´íŠ¸ ì„ ì–¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeChanged, const FString&, NewTimecode);
 
-// Å¸ÀÓÄÚµå ÀÌº¥Æ® Æ®¸®°Å¸¦ À§ÇÑ µ¨¸®°ÔÀÌÆ® ¼±¾ğ
+// íƒ€ì„ì½”ë“œ ì´ë²¤íŠ¸ íŠ¸ë¦¬ê±°ë¥¼ ìœ„í•œ ë¸ë¦¬ê²Œì´íŠ¸ ì„ ì–¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTimecodeEventTriggered, const FString&, EventName, float, EventTime);
 
-// ³×Æ®¿öÅ© ¿¬°á »óÅÂ º¯°æÀ» À§ÇÑ µ¨¸®°ÔÀÌÆ® ¼±¾ğ
+// ë„¤íŠ¸ì›Œí¬ ì—°ê²° ìƒíƒœ ë³€ê²½ì„ ìœ„í•œ ë¸ë¦¬ê²Œì´íŠ¸ ì„ ì–¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkConnectionChanged, ENetworkConnectionState, NewState);
 
 /**
- * ¾×ÅÍ¿¡ ºÎÂøÇÏ¿© Å¸ÀÓÄÚµå ±â´ÉÀ» Á¦°øÇÏ´Â ÄÄÆ÷³ÍÆ®
+ * ì•¡í„°ì— ë¶€ì°©í•˜ì—¬ íƒ€ì„ì½”ë“œ ê¸°ëŠ¥ì„ ì œê³µí•˜ëŠ” ì»´í¬ë„ŒíŠ¸
  */
 UCLASS(ClassGroup = "Timecode", meta = (BlueprintSpawnableComponent))
 class TIMECODESYNC_API UTimecodeComponent : public UActorComponent
@@ -25,131 +25,131 @@ class TIMECODESYNC_API UTimecodeComponent : public UActorComponent
 public:
     UTimecodeComponent();
 
-    // Å¸ÀÓÄÚµå ¿ªÇÒ ¼³Á¤
+    // íƒ€ì„ì½”ë“œ ì—­í•  ì„¤ì •
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode")
     bool bIsMaster;
 
-    // nDisplay »ç¿ë ¿©ºÎ
+    // nDisplay ì‚¬ìš© ì—¬ë¶€
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode")
     bool bUseNDisplay;
 
-    // ÇÁ·¹ÀÓ ·¹ÀÌÆ® ¼³Á¤
+    // í”„ë ˆì„ ë ˆì´íŠ¸ ì„¤ì •
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode", meta = (ClampMin = "1.0", ClampMax = "240.0"))
     float FrameRate;
 
-    // UDP Æ÷Æ® ¼³Á¤
+    // UDP í¬íŠ¸ ì„¤ì •
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (ClampMin = "1024", ClampMax = "65535"))
     int32 UDPPort;
 
-    // Å¸°Ù IP ¼³Á¤ (¸¶½ºÅÍ ¸ğµå¿¡¼­ À¯´ÏÄ³½ºÆ® Àü¼Û ½Ã)
+    // íƒ€ê²Ÿ IP ì„¤ì • (ë§ˆìŠ¤í„° ëª¨ë“œì—ì„œ ìœ ë‹ˆìºìŠ¤íŠ¸ ì „ì†¡ ì‹œ)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network")
     FString TargetIP;
 
-    // ¸ÖÆ¼Ä³½ºÆ® ±×·ì ¼³Á¤
+    // ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ì„¤ì •
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network")
     FString MulticastGroup;
 
-    // ÀÚµ¿ ½ÃÀÛ ¼³Á¤
+    // ìë™ ì‹œì‘ ì„¤ì •
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode")
     bool bAutoStart;
 
-    // ³×Æ®¿öÅ© µ¿±âÈ­ °£°İ (ÃÊ)
+    // ë„¤íŠ¸ì›Œí¬ ë™ê¸°í™” ê°„ê²© (ì´ˆ)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (ClampMin = "0.001", ClampMax = "1.0"))
     float SyncInterval;
 
-    // ÇöÀç Å¸ÀÓÄÚµå (ÀĞ±â Àü¿ë)
+    // í˜„ì¬ íƒ€ì„ì½”ë“œ (ì½ê¸° ì „ìš©)
     UPROPERTY(BlueprintReadOnly, Category = "Timecode")
     FString CurrentTimecode;
 
-    // Å¸ÀÓÄÚµå º¯°æ ÀÌº¥Æ®
+    // íƒ€ì„ì½”ë“œ ë³€ê²½ ì´ë²¤íŠ¸
     UPROPERTY(BlueprintAssignable, Category = "Timecode")
     FOnTimecodeChanged OnTimecodeChanged;
 
-    // Å¸ÀÓÄÚµå ÀÌº¥Æ® Æ®¸®°Å
+    // íƒ€ì„ì½”ë“œ ì´ë²¤íŠ¸ íŠ¸ë¦¬ê±°
     UPROPERTY(BlueprintAssignable, Category = "Timecode")
     FOnTimecodeEventTriggered OnTimecodeEventTriggered;
 
-    // ³×Æ®¿öÅ© ¿¬°á »óÅÂ º¯°æ ÀÌº¥Æ®
+    // ë„¤íŠ¸ì›Œí¬ ì—°ê²° ìƒíƒœ ë³€ê²½ ì´ë²¤íŠ¸
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnNetworkConnectionChanged OnNetworkConnectionChanged;
 
 protected:
-    // ÄÄÆ÷³ÍÆ® ÃÊ±âÈ­ ½Ã È£Ãâ
+    // ì»´í¬ë„ŒíŠ¸ ì´ˆê¸°í™” ì‹œ í˜¸ì¶œ
     virtual void BeginPlay() override;
 
-    // ÄÄÆ÷³ÍÆ® Á¦°Å ½Ã È£Ãâ
+    // ì»´í¬ë„ŒíŠ¸ ì œê±° ì‹œ í˜¸ì¶œ
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-    // ¸Å ÇÁ·¹ÀÓ È£Ãâ
+    // ë§¤ í”„ë ˆì„ í˜¸ì¶œ
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
-    // Å¸ÀÓÄÚµå ½ÃÀÛ
+    // íƒ€ì„ì½”ë“œ ì‹œì‘
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     void StartTimecode();
 
-    // Å¸ÀÓÄÚµå Á¤Áö
+    // íƒ€ì„ì½”ë“œ ì •ì§€
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     void StopTimecode();
 
-    // Å¸ÀÓÄÚµå Àç¼³Á¤
+    // íƒ€ì„ì½”ë“œ ì¬ì„¤ì •
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     void ResetTimecode();
 
-    // Å¸ÀÓÄÚµå ÀÌº¥Æ® µî·Ï
+    // íƒ€ì„ì½”ë“œ ì´ë²¤íŠ¸ ë“±ë¡
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     void RegisterTimecodeEvent(const FString& EventName, float EventTimeInSeconds);
 
-    // Å¸ÀÓÄÚµå ÀÌº¥Æ® Á¦°Å
+    // íƒ€ì„ì½”ë“œ ì´ë²¤íŠ¸ ì œê±°
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     void UnregisterTimecodeEvent(const FString& EventName);
 
-    // ³×Æ®¿öÅ© ¿¬°á »óÅÂ °¡Á®¿À±â
+    // ë„¤íŠ¸ì›Œí¬ ì—°ê²° ìƒíƒœ ê°€ì ¸ì˜¤ê¸°
     UFUNCTION(BlueprintCallable, Category = "Network")
     ENetworkConnectionState GetNetworkConnectionState() const;
 
-    // ³×Æ®¿öÅ© ¿¬°á ¼³Á¤
+    // ë„¤íŠ¸ì›Œí¬ ì—°ê²° ì„¤ì •
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool SetupNetwork();
 
-    // ³×Æ®¿öÅ© ¿¬°á Á¾·á
+    // ë„¤íŠ¸ì›Œí¬ ì—°ê²° ì¢…ë£Œ
     UFUNCTION(BlueprintCallable, Category = "Network")
     void ShutdownNetwork();
 
 private:
-    // Å¸ÀÓÄÚµå ½ÇÇà Áß ¿©ºÎ
+    // íƒ€ì„ì½”ë“œ ì‹¤í–‰ ì¤‘ ì—¬ë¶€
     bool bIsRunning;
 
-    // °æ°ú ½Ã°£ (ÃÊ)
+    // ê²½ê³¼ ì‹œê°„ (ì´ˆ)
     float ElapsedTimeSeconds;
 
-    // Å¸ÀÓÄÚµå ÀÌº¥Æ® ¸Ê (ÀÌº¥Æ® ÀÌ¸§ -> Æ®¸®°Å ½Ã°£)
+    // íƒ€ì„ì½”ë“œ ì´ë²¤íŠ¸ ë§µ (ì´ë²¤íŠ¸ ì´ë¦„ -> íŠ¸ë¦¬ê±° ì‹œê°„)
     TMap<FString, float> TimecodeEvents;
 
-    // ÀÌ¹Ì Æ®¸®°ÅµÈ ÀÌº¥Æ® ÃßÀû
+    // ì´ë¯¸ íŠ¸ë¦¬ê±°ëœ ì´ë²¤íŠ¸ ì¶”ì 
     TSet<FString> TriggeredEvents;
 
-    // ³×Æ®¿öÅ© µ¿±âÈ­ Å¸ÀÌ¸Ó
+    // ë„¤íŠ¸ì›Œí¬ ë™ê¸°í™” íƒ€ì´ë¨¸
     float SyncTimer;
 
-    // ³×Æ®¿öÅ© °ü¸®ÀÚ
+    // ë„¤íŠ¸ì›Œí¬ ê´€ë¦¬ì
     UPROPERTY()
     UTimecodeNetworkManager* NetworkManager;
 
-    // ³»ºÎ Å¸ÀÓÄÚµå ¾÷µ¥ÀÌÆ® ÇÔ¼ö
+    // ë‚´ë¶€ íƒ€ì„ì½”ë“œ ì—…ë°ì´íŠ¸ í•¨ìˆ˜
     void UpdateTimecode(float DeltaTime);
 
-    // Å¸ÀÓÄÚµå ÀÌº¥Æ® È®ÀÎ ÇÔ¼ö
+    // íƒ€ì„ì½”ë“œ ì´ë²¤íŠ¸ í™•ì¸ í•¨ìˆ˜
     void CheckTimecodeEvents();
 
-    // ³×Æ®¿öÅ© µ¿±âÈ­ ÇÔ¼ö
+    // ë„¤íŠ¸ì›Œí¬ ë™ê¸°í™” í•¨ìˆ˜
     void SyncOverNetwork();
 
-    // ³×Æ®¿öÅ© ¸Ş½ÃÁö ¼ö½Å Äİ¹é
+    // ë„¤íŠ¸ì›Œí¬ ë©”ì‹œì§€ ìˆ˜ì‹  ì½œë°±
     UFUNCTION()
     void OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message);
 
-    // ³×Æ®¿öÅ© »óÅÂ º¯°æ Äİ¹é
+    // ë„¤íŠ¸ì›Œí¬ ìƒíƒœ ë³€ê²½ ì½œë°±
     UFUNCTION()
     void OnNetworkStateChanged(ENetworkConnectionState NewState);
 };

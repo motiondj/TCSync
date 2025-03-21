@@ -2,30 +2,36 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Interfaces/IPv4/IPv4Endpoint.h"
+#include "Common/UdpSocketReceiver.h"
+#include "Common/UdpSocketBuilder.h"
+#include "Networking.h"
+#include "Sockets.h"
+#include "SocketSubsystem.h"
+#include "IPAddress.h"
+#include "Serialization/ArrayReader.h"
 #include "TimecodeNetworkTypes.h"
 #include "TimecodeNetworkManager.generated.h"
 
 class FSocket;
 class FUdpSocketReceiver;
 
-// ³×Æ®¿öÅ© ¿¬°á »óÅÂ ¿­°ÅÇü
+// ë„¤íŠ¸ì›Œí¬ ì—°ê²° ìƒíƒœ ì—´ê±°í˜•
 UENUM(BlueprintType)
 enum class ENetworkConnectionState : uint8
 {
-    Disconnected,  // ¿¬°áµÇÁö ¾ÊÀ½
-    Connecting,    // ¿¬°á Áß
-    Connected      // ¿¬°áµÊ
+    Disconnected,  // ì—°ê²°ë˜ì§€ ì•ŠìŒ
+    Connecting,    // ì—°ê²° ì¤‘
+    Connected      // ì—°ê²°ë¨
 };
 
-// Å¸ÀÓÄÚµå ¸Ş½ÃÁö ¼ö½Å µ¨¸®°ÔÀÌÆ®
+// íƒ€ì„ì½”ë“œ ë©”ì‹œì§€ ìˆ˜ì‹  ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeMessageReceived, const FTimecodeNetworkMessage&, Message);
 
-// ³×Æ®¿öÅ© »óÅÂ º¯°æ µ¨¸®°ÔÀÌÆ®
+// ë„¤íŠ¸ì›Œí¬ ìƒíƒœ ë³€ê²½ ë¸ë¦¬ê²Œì´íŠ¸
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkStateChanged, ENetworkConnectionState, NewState);
 
 /**
- * Å¸ÀÓÄÚµå ³×Æ®¿öÅ© Åë½ÅÀ» °ü¸®ÇÏ´Â Å¬·¡½º
+ * íƒ€ì„ì½”ë“œ ë„¤íŠ¸ì›Œí¬ ê´€ë¦¬ì í´ë˜ìŠ¤
  */
 UCLASS(BlueprintType)
 class TIMECODESYNC_API UTimecodeNetworkManager : public UObject
@@ -36,79 +42,79 @@ public:
     UTimecodeNetworkManager();
     virtual ~UTimecodeNetworkManager();
 
-    // ³×Æ®¿öÅ© ÃÊ±âÈ­ (¸¶½ºÅÍ/½½·¹ÀÌºê ¸ğµå)
+    // ë„¤íŠ¸ì›Œí¬ ì´ˆê¸°í™” (ë§ˆìŠ¤í„°/ìŠ¬ë ˆì´ë¸Œ ëª¨ë“œ)
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool Initialize(bool bIsMaster, int32 Port);
 
-    // ³×Æ®¿öÅ© Á¾·á
+    // ë„¤íŠ¸ì›Œí¬ ì¢…ë£Œ
     UFUNCTION(BlueprintCallable, Category = "Network")
     void Shutdown();
 
-    // Å¸ÀÓÄÚµå ¸Ş½ÃÁö Àü¼Û
+    // íƒ€ì„ì½”ë“œ ë©”ì‹œì§€ ì „ì†¡
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool SendTimecodeMessage(const FString& Timecode, ETimecodeMessageType MessageType = ETimecodeMessageType::TimecodeSync);
 
-    // ÀÌº¥Æ® ¸Ş½ÃÁö Àü¼Û
+    // ì´ë²¤íŠ¸ ë©”ì‹œì§€ ì „ì†¡
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool SendEventMessage(const FString& EventName, const FString& Timecode);
 
-    // Å¸°Ù IP ¼³Á¤
+    // íƒ€ê²Ÿ IP ì„¤ì •
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetTargetIP(const FString& IPAddress);
 
-    // ¸ÖÆ¼Ä³½ºÆ® ±×·ì ¼³Á¤
+    // ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ì°¸ê°€
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool JoinMulticastGroup(const FString& MulticastGroup);
 
-    // ¿¬°á »óÅÂ È®ÀÎ
+    // ë„¤íŠ¸ì›Œí¬ ìƒíƒœ í™•ì¸
     UFUNCTION(BlueprintCallable, Category = "Network")
     ENetworkConnectionState GetConnectionState() const;
 
-    // ¸Ş½ÃÁö ¼ö½Å ÀÌº¥Æ®
+    // íƒ€ì„ì½”ë“œ ë©”ì‹œì§€ ìˆ˜ì‹  ë¸ë¦¬ê²Œì´íŠ¸
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnTimecodeMessageReceived OnMessageReceived;
 
-    // ³×Æ®¿öÅ© »óÅÂ º¯°æ ÀÌº¥Æ®
+    // ë„¤íŠ¸ì›Œí¬ ìƒíƒœ ë³€ê²½ ë¸ë¦¬ê²Œì´íŠ¸
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnNetworkStateChanged OnNetworkStateChanged;
 
 private:
-    // UDP ¼ÒÄÏ
+    // UDP ì†Œì¼“
     FSocket* Socket;
 
-    // UDP ¼ö½Å±â
+    // UDP ë¦¬ì‹œë²„
     FUdpSocketReceiver* Receiver;
 
-    // ¿¬°á »óÅÂ
+    // ì—°ê²° ìƒíƒœ
     ENetworkConnectionState ConnectionState;
 
-    // ¼Û½ÅÀÚ ID (°íÀ¯ ½Äº°ÀÚ)
+    // ì†¡ì‹ ì ID (ê³ ìœ  ì‹ë³„ì)
     FString InstanceID;
 
-    // Æ÷Æ® ¹øÈ£
+    // í¬íŠ¸ ë²ˆí˜¸
     int32 PortNumber;
 
-    // Å¸°Ù IP ÁÖ¼Ò
+    // íƒ€ê²Ÿ IP ì£¼ì†Œ
     FString TargetIPAddress;
 
-    // ¸ÖÆ¼Ä³½ºÆ® ±×·ì ÁÖ¼Ò
+    // ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ì£¼ì†Œ
     FString MulticastGroupAddress;
 
-    // ¸¶½ºÅÍ ¸ğµå ¿©ºÎ
+    // ë§ˆìŠ¤í„° ëª¨ë“œ ì—¬ë¶€
     bool bIsMasterMode;
 
-    // UDP ¼ö½Å Äİ¹é
+    // UDP ìˆ˜ì‹  ì½œë°±
     void OnUDPReceived(const FArrayReaderPtr& DataPtr, const FIPv4Endpoint& Endpoint);
 
-    // ¼ÒÄÏ »ı¼º ÇÔ¼ö
+    // ì†Œì¼“ ìƒì„± í•¨ìˆ˜
     bool CreateSocket();
 
-    // ¸Ş½ÃÁö Ã³¸® ÇÔ¼ö
+    // ë©”ì‹œì§€ ì²˜ë¦¬ í•¨ìˆ˜
     void ProcessMessage(const FTimecodeNetworkMessage& Message);
 
-    // ¿¬°á »óÅÂ º¯°æ ÇÔ¼ö
+    // ì—°ê²° ìƒíƒœ ì„¤ì • í•¨ìˆ˜
     void SetConnectionState(ENetworkConnectionState NewState);
 
-    // ÇÏÆ®ºñÆ® ¸Ş½ÃÁö Àü¼Û
+    // í•˜íŠ¸ë¹„íŠ¸ ë©”ì‹œì§€ ì „ì†¡
     void SendHeartbeat();
 };

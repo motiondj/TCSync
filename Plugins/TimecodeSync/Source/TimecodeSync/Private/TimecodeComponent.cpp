@@ -1,14 +1,14 @@
-#include "TimecodeComponent.h"
+ï»¿#include "TimecodeComponent.h"
 #include "TimecodeUtils.h"
 #include "TimecodeSettings.h"
 #include "Engine/World.h"
 
 UTimecodeComponent::UTimecodeComponent()
 {
-    // ÄÄÆ÷³ÍÆ® ¼³Á¤
+    // ì»´í¬ë„ŒíŠ¸ ì„¤ì •
     PrimaryComponentTick.bCanEverTick = true;
 
-    // ±âº»°ª ¼³Á¤
+    // ê¸°ë³¸ê°’ ì„¤ì •
     const UTimecodeSettings* Settings = GetDefault<UTimecodeSettings>();
     bIsMaster = false;
     bUseNDisplay = false;
@@ -17,9 +17,9 @@ UTimecodeComponent::UTimecodeComponent()
     UDPPort = Settings ? Settings->DefaultUDPPort : 10000;
     TargetIP = TEXT("");
     MulticastGroup = Settings ? Settings->MulticastGroupAddress : TEXT("239.0.0.1");
-    SyncInterval = Settings ? Settings->BroadcastInterval : 0.033f; // ¾à 30Hz
+    SyncInterval = Settings ? Settings->BroadcastInterval : 0.033f; // ì•½ 30Hz
 
-    // ³»ºÎ º¯¼ö ÃÊ±âÈ­
+    // ë‚´ë¶€ ë³€ìˆ˜ ì´ˆê¸°í™”
     bIsRunning = false;
     ElapsedTimeSeconds = 0.0f;
     CurrentTimecode = TEXT("00:00:00:00");
@@ -31,10 +31,10 @@ void UTimecodeComponent::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ³×Æ®¿öÅ© ¼³Á¤
+    // ë„¤íŠ¸ì›Œí¬ ì„¤ì •
     SetupNetwork();
 
-    // ÀÚµ¿ ½ÃÀÛ ¼³Á¤
+    // ìë™ ì‹œì‘ ì„¤ì •
     if (bAutoStart)
     {
         StartTimecode();
@@ -43,7 +43,7 @@ void UTimecodeComponent::BeginPlay()
 
 void UTimecodeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // ³×Æ®¿öÅ© Á¾·á
+    // ë„¤íŠ¸ì›Œí¬ ì¢…ë£Œ
     ShutdownNetwork();
 
     Super::EndPlay(EndPlayReason);
@@ -53,13 +53,13 @@ void UTimecodeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // Å¸ÀÓÄÚµå ½ÇÇà ÁßÀÎ °æ¿ì ¾÷µ¥ÀÌÆ®
+    // íƒ€ì„ì½”ë“œ ì‹¤í–‰ ì¤‘ì¸ ê²½ìš° ì—…ë°ì´íŠ¸
     if (bIsRunning)
     {
         UpdateTimecode(DeltaTime);
         CheckTimecodeEvents();
 
-        // ³×Æ®¿öÅ© µ¿±âÈ­ Å¸ÀÌ¸Ó ¾÷µ¥ÀÌÆ®
+        // ë„¤íŠ¸ì›Œí¬ ë™ê¸°í™” íƒ€ì´ë¨¸ ì—…ë°ì´íŠ¸
         if (bIsMaster && NetworkManager)
         {
             SyncTimer += DeltaTime;
@@ -92,7 +92,7 @@ void UTimecodeComponent::ResetTimecode()
     CurrentTimecode = TEXT("00:00:00:00");
     TriggeredEvents.Empty();
 
-    // Å¸ÀÓÄÚµå º¯°æ ÀÌº¥Æ® ¹ß»ı
+    // íƒ€ì„ì½”ë“œ ë³€ê²½ ì´ë²¤íŠ¸ ë°œìƒ
     OnTimecodeChanged.Broadcast(CurrentTimecode);
 
     UE_LOG(LogTemp, Log, TEXT("Timecode reset"));
@@ -127,27 +127,27 @@ ENetworkConnectionState UTimecodeComponent::GetNetworkConnectionState() const
 
 bool UTimecodeComponent::SetupNetwork()
 {
-    // ±âÁ¸ ³×Æ®¿öÅ© ¸Å´ÏÀú Á¾·á
+    // ê¸°ì¡´ ë„¤íŠ¸ì›Œí¬ ë§¤ë‹ˆì € ì¢…ë£Œ
     ShutdownNetwork();
 
-    // ³×Æ®¿öÅ© ¸Å´ÏÀú »ı¼º
+    // ë„¤íŠ¸ì›Œí¬ ë§¤ë‹ˆì € ìƒì„±
     NetworkManager = NewObject<UTimecodeNetworkManager>(this);
     if (NetworkManager)
     {
-        // Äİ¹é ¼³Á¤
+        // ì½œë°± ì„¤ì •
         NetworkManager->OnMessageReceived.AddDynamic(this, &UTimecodeComponent::OnTimecodeMessageReceived);
         NetworkManager->OnNetworkStateChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkStateChanged);
 
-        // ³×Æ®¿öÅ© ÃÊ±âÈ­
+        // ë„¤íŠ¸ì›Œí¬ ì´ˆê¸°í™”
         bool bSuccess = NetworkManager->Initialize(bIsMaster, UDPPort);
 
-        // Å¸°Ù IP ¼³Á¤
+        // íƒ€ê²Ÿ IP ì„¤ì •
         if (!TargetIP.IsEmpty())
         {
             NetworkManager->SetTargetIP(TargetIP);
         }
 
-        // ¸ÖÆ¼Ä³½ºÆ® ±×·ì Âü°¡
+        // ë©€í‹°ìºìŠ¤íŠ¸ ê·¸ë£¹ ì°¸ê°€
         if (!MulticastGroup.IsEmpty())
         {
             NetworkManager->JoinMulticastGroup(MulticastGroup);
@@ -174,16 +174,16 @@ void UTimecodeComponent::ShutdownNetwork()
 
 void UTimecodeComponent::UpdateTimecode(float DeltaTime)
 {
-    // ¸¶½ºÅÍ ¸ğµå¿¡¼­¸¸ Å¸ÀÓÄÚµå ¾÷µ¥ÀÌÆ®
+    // ë§ˆìŠ¤í„° ëª¨ë“œì—ì„œë§Œ íƒ€ì„ì½”ë“œ ì—…ë°ì´íŠ¸
     if (bIsMaster)
     {
-        // °æ°ú ½Ã°£ ¾÷µ¥ÀÌÆ®
+        // ê²½ê³¼ ì‹œê°„ ì—…ë°ì´íŠ¸
         ElapsedTimeSeconds += DeltaTime;
 
-        // Å¸ÀÓÄÚµå »ı¼º
+        // íƒ€ì„ì½”ë“œ ìƒì„±
         FString NewTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, false);
 
-        // Å¸ÀÓÄÚµå°¡ º¯°æµÈ °æ¿ì ÀÌº¥Æ® ¹ß»ı
+        // íƒ€ì„ì½”ë“œê°€ ë³€ê²½ëœ ê²½ìš° ì´ë²¤íŠ¸ ë°œìƒ
         if (NewTimecode != CurrentTimecode)
         {
             CurrentTimecode = NewTimecode;
@@ -194,22 +194,22 @@ void UTimecodeComponent::UpdateTimecode(float DeltaTime)
 
 void UTimecodeComponent::CheckTimecodeEvents()
 {
-    // µî·ÏµÈ ¸ğµç ÀÌº¥Æ® È®ÀÎ
+    // ë“±ë¡ëœ ëª¨ë“  ì´ë²¤íŠ¸ í™•ì¸
     for (const auto& Event : TimecodeEvents)
     {
         const FString& EventName = Event.Key;
         float EventTime = Event.Value;
 
-        // ¾ÆÁ÷ Æ®¸®°ÅµÇÁö ¾ÊÀº ÀÌº¥Æ®ÀÌ°í, ÇöÀç ½Ã°£ÀÌ ÀÌº¥Æ® ½Ã°£À» Áö³µ´ÂÁö È®ÀÎ
+        // ì•„ì§ íŠ¸ë¦¬ê±°ë˜ì§€ ì•Šì€ ì´ë²¤íŠ¸ì´ê³ , í˜„ì¬ ì‹œê°„ì´ ì´ë²¤íŠ¸ ì‹œê°„ì„ ì§€ë‚¬ëŠ”ì§€ í™•ì¸
         if (!TriggeredEvents.Contains(EventName) && ElapsedTimeSeconds >= EventTime)
         {
-            // ÀÌº¥Æ® Æ®¸®°Å
+            // ì´ë²¤íŠ¸ íŠ¸ë¦¬ê±°
             OnTimecodeEventTriggered.Broadcast(EventName, EventTime);
 
-            // Æ®¸®°ÅµÈ ÀÌº¥Æ®·Î Ç¥½Ã
+            // íŠ¸ë¦¬ê±°ëœ ì´ë²¤íŠ¸ë¡œ í‘œì‹œ
             TriggeredEvents.Add(EventName);
 
-            // ÀÌº¥Æ® ³×Æ®¿öÅ© ºê·ÎµåÄ³½ºÆ® (¸¶½ºÅÍ ¸ğµå¿¡¼­¸¸)
+            // ì´ë²¤íŠ¸ ë„¤íŠ¸ì›Œí¬ ë¸Œë¡œë“œìºìŠ¤íŠ¸ (ë§ˆìŠ¤í„° ëª¨ë“œì—ì„œë§Œ)
             if (bIsMaster && NetworkManager)
             {
                 NetworkManager->SendEventMessage(EventName, CurrentTimecode);
@@ -224,20 +224,20 @@ void UTimecodeComponent::SyncOverNetwork()
 {
     if (NetworkManager && bIsMaster)
     {
-        // ÇöÀç Å¸ÀÓÄÚµå ³×Æ®¿öÅ©·Î Àü¼Û
+        // í˜„ì¬ íƒ€ì„ì½”ë“œ ë„¤íŠ¸ì›Œí¬ë¡œ ì „ì†¡
         NetworkManager->SendTimecodeMessage(CurrentTimecode, ETimecodeMessageType::TimecodeSync);
     }
 }
 
 void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
 {
-    // ½½·¹ÀÌºê ¸ğµå¿¡¼­¸¸ ¸Ş½ÃÁö Ã³¸®
+    // ìŠ¬ë ˆì´ë¸Œ ëª¨ë“œì—ì„œë§Œ ë©”ì‹œì§€ ì²˜ë¦¬
     if (!bIsMaster)
     {
         switch (Message.MessageType)
         {
         case ETimecodeMessageType::TimecodeSync:
-            // Å¸ÀÓÄÚµå µ¿±âÈ­ ¸Ş½ÃÁö Ã³¸®
+            // íƒ€ì„ì½”ë“œ ë™ê¸°í™” ë©”ì‹œì§€ ì²˜ë¦¬
             if (Message.Timecode != CurrentTimecode)
             {
                 CurrentTimecode = Message.Timecode;
@@ -249,14 +249,14 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             break;
 
         case ETimecodeMessageType::Event:
-            // ÀÌº¥Æ® ¸Ş½ÃÁö Ã³¸®
+            // ì´ë²¤íŠ¸ ë©”ì‹œì§€ ì²˜ë¦¬
             OnTimecodeEventTriggered.Broadcast(Message.Data, ElapsedTimeSeconds);
 
             UE_LOG(LogTemp, Log, TEXT("Received timecode event: %s"), *Message.Data);
             break;
 
         default:
-            // ±âÅ¸ ¸Ş½ÃÁö Å¸ÀÔ ¹«½Ã
+            // ê¸°íƒ€ ë©”ì‹œì§€ íƒ€ì… ë¬´ì‹œ
             break;
         }
     }
@@ -264,7 +264,7 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
 
 void UTimecodeComponent::OnNetworkStateChanged(ENetworkConnectionState NewState)
 {
-    // ³×Æ®¿öÅ© »óÅÂ º¯°æ ÀÌº¥Æ® ¹ß»ı
+    // ë„¤íŠ¸ì›Œí¬ ìƒíƒœ ë³€ê²½ ì´ë²¤íŠ¸ ë°œìƒ
     OnNetworkConnectionChanged.Broadcast(NewState);
 
     UE_LOG(LogTemp, Log, TEXT("Network connection state changed: %d"), (int32)NewState);
