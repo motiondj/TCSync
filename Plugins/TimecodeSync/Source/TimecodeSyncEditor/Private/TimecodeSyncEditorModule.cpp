@@ -1,4 +1,4 @@
-#include "TimecodeSyncEditorModule.h"
+癤�#include "TimecodeSyncEditorModule.h"
 #include "TimecodeSyncEditorStyle.h"
 #include "TimecodeSyncEditorCommands.h"
 #include "STimecodeSyncEditorUI.h"
@@ -17,17 +17,17 @@ const FName FTimecodeSyncEditorModule::TimecodeSyncTabId = TEXT("TimecodeSyncTab
 
 void FTimecodeSyncEditorModule::StartupModule()
 {
-    // 스타일 및 명령어 등록
+    // Register styles and commands
     FTimecodeSyncEditorStyle::Initialize();
     FTimecodeSyncEditorCommands::Register();
 
-    // 명령어 바인딩
+    // Bind commands
     RegisterCommands();
 
-    // 메뉴 확장 등록
+    // Register menu extensions
     RegisterMenus();
 
-    // 탭 스포너 등록
+    // Register tab spawner
     TimecodeSyncTabSpawnerDelegate = FOnSpawnTab::CreateRaw(this, &FTimecodeSyncEditorModule::SpawnTimecodeSyncTab);
 
     FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
@@ -39,17 +39,17 @@ void FTimecodeSyncEditorModule::StartupModule()
 
 void FTimecodeSyncEditorModule::ShutdownModule()
 {
-    // 메뉴 등록 해제
+    // Unregister menus
     UToolMenus::UnRegisterStartupCallback(this);
     UToolMenus::UnregisterOwner(this);
 
-    // 스타일 정리
+    // Clean up styles
     FTimecodeSyncEditorStyle::Shutdown();
 
-    // 명령어 등록 해제
+    // Unregister commands
     FTimecodeSyncEditorCommands::Unregister();
 
-    // 탭 스포너 등록 해제
+    // Unregister tab spawner
     FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TimecodeSyncTabId);
 }
 
@@ -64,23 +64,23 @@ TSharedRef<SDockTab> FTimecodeSyncEditorModule::SpawnTimecodeSyncTab(const FSpaw
 
 void FTimecodeSyncEditorModule::RegisterMenus()
 {
-    // 툴 메뉴 소유자 등록
+    // Register tool menu owner
     FToolMenuOwnerScoped OwnerScoped(this);
 
-    // 메인 메뉴 확장
+    // Extend main menu
     UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Window");
     FToolMenuSection& Section = Menu->FindOrAddSection("WindowLayout");
 
-    // 메뉴 항목 추가
+    // Add menu items
     Section.AddMenuEntryWithCommandList(
         FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
         FTimecodeSyncEditorCommands::Get().CommandList);
 
-    // 툴바 확장
+    // Extend toolbar
     UToolMenu* ToolbarMenu = UToolMenus::Get()->ExtendMenu("LevelEditor.LevelEditorToolBar.PlayToolBar");
     FToolMenuSection& ToolbarSection = ToolbarMenu->FindOrAddSection("PluginTools");
 
-    // 툴바 버튼 추가
+    // Add toolbar button
     FToolMenuEntry& Entry = ToolbarSection.AddEntry(
         FToolMenuEntry::InitToolBarButton(
             FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
@@ -95,10 +95,10 @@ void FTimecodeSyncEditorModule::RegisterMenus()
 
 void FTimecodeSyncEditorModule::RegisterCommands()
 {
-    // 명령어 리스트 생성
+    // Create command list
     FTimecodeSyncEditorCommands::Get().CommandList = MakeShareable(new FUICommandList);
 
-    // 명령어 바인딩
+    // Bind commands
     FTimecodeSyncEditorCommands::Get().CommandList->MapAction(
         FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
         FExecuteAction::CreateRaw(this, &FTimecodeSyncEditorModule::OpenTimecodeSyncTab),

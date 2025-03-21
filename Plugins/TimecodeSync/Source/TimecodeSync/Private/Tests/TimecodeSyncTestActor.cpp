@@ -1,4 +1,4 @@
-// TimecodeSyncTestActor.cpp
+癤�// TimecodeSyncTestActor.cpp
 #include "TimecodeSyncTestActor.h"
 #include "Tests/TimecodeSyncNetworkTest.h"
 #include "Tests/TimecodeSyncLogicTest.h"
@@ -8,7 +8,7 @@ ATimecodeSyncTestActor::ATimecodeSyncTestActor()
 {
     PrimaryActorTick.bCanEverTick = false;
 
-    // 기본값 설정
+    // Set default values
     TestType = 0;
     UDPPort = 12345;
     SyncDuration = 5.0f;
@@ -18,7 +18,7 @@ void ATimecodeSyncTestActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    // 자동으로 테스트 실행
+    // Run test automatically
     if (TestType > 0)
     {
         RunSelectedTest();
@@ -29,7 +29,7 @@ void ATimecodeSyncTestActor::RunSelectedTest()
 {
     switch (TestType)
     {
-    case 1: // UDP 연결 테스트
+    case 1: // UDP connection test
     {
         UTimecodeSyncNetworkTest* TestInstance = NewObject<UTimecodeSyncNetworkTest>();
         if (TestInstance)
@@ -46,7 +46,7 @@ void ATimecodeSyncTestActor::RunSelectedTest()
         }
         break;
     }
-    case 2: // 마스터/슬레이브 동기화 테스트
+    case 2: // Master/Slave synchronization test
     {
         UTimecodeSyncLogicTest* TestInstance = NewObject<UTimecodeSyncLogicTest>();
         if (TestInstance)
@@ -63,7 +63,7 @@ void ATimecodeSyncTestActor::RunSelectedTest()
         }
         break;
     }
-    case 3: // 다양한 타임코드 테스트
+    case 3: // Multiple timecode test
     {
         UTimecodeSyncLogicTest* TestInstance = NewObject<UTimecodeSyncLogicTest>();
         if (TestInstance)
@@ -80,7 +80,7 @@ void ATimecodeSyncTestActor::RunSelectedTest()
         }
         break;
     }
-    case 4: // 시스템 시간 동기화 테스트
+    case 4: // System time synchronization test
     {
         UTimecodeSyncLogicTest* TestInstance = NewObject<UTimecodeSyncLogicTest>();
         if (TestInstance)
@@ -105,7 +105,7 @@ void ATimecodeSyncTestActor::RunSelectedTest()
 
 void ATimecodeSyncTestActor::RunAllTests()
 {
-    // UDP 연결 테스트
+    // UDP connection test
     UTimecodeSyncNetworkTest* NetworkTest = NewObject<UTimecodeSyncNetworkTest>();
     if (NetworkTest)
     {
@@ -120,14 +120,14 @@ void ATimecodeSyncTestActor::RunAllTests()
         }
     }
 
-    // 잠시 대기
+    // Wait for a moment
     FPlatformProcess::Sleep(1.0f);
 
-    // 타임코드 동기화 로직 테스트
+    // Timecode synchronization logic test
     UTimecodeSyncLogicTest* LogicTest = NewObject<UTimecodeSyncLogicTest>();
     if (LogicTest)
     {
-        // 마스터/슬레이브 동기화 테스트
+        // Master/Slave synchronization test
         bool SyncResult = LogicTest->TestMasterSlaveSync(SyncDuration);
 
         if (GEngine)
@@ -138,10 +138,10 @@ void ATimecodeSyncTestActor::RunAllTests()
                     SyncResult ? TEXT("PASSED") : TEXT("FAILED")));
         }
 
-        // 잠시 대기
+        // Wait for a moment
         FPlatformProcess::Sleep(1.0f);
 
-        // 다양한 타임코드 테스트
+        // Multiple timecode test
         bool TimecodeResult = LogicTest->TestMultipleFrameRates();
 
         if (GEngine)
@@ -152,10 +152,10 @@ void ATimecodeSyncTestActor::RunAllTests()
                     TimecodeResult ? TEXT("PASSED") : TEXT("FAILED")));
         }
 
-        // 잠시 대기
+        // Wait for a moment
         FPlatformProcess::Sleep(1.0f);
 
-        // 시스템 시간 동기화 테스트
+        // System time synchronization test
         bool SystemTimeResult = LogicTest->TestSystemTimeSync();
 
         if (GEngine)

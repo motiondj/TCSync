@@ -1,4 +1,4 @@
-// TimecodeSyncLogicTest.h (수정된 버전)
+癤�// TimecodeSyncLogicTest.h (Modified version)
 #pragma once
 
 #include "CoreMinimal.h"
@@ -7,8 +7,8 @@
 #include "TimecodeSyncLogicTest.generated.h"
 
 /**
- * 타임코드 동기화 로직 테스트 클래스
- * 마스터/슬레이브 모드 동기화 테스트
+ * Timecode synchronization logic test class
+ * For testing master/slave mode synchronization
  */
 UCLASS(Blueprintable, BlueprintType)
 class TIMECODESYNC_API UTimecodeSyncLogicTest : public UObject
@@ -18,39 +18,39 @@ class TIMECODESYNC_API UTimecodeSyncLogicTest : public UObject
 public:
     UTimecodeSyncLogicTest();
 
-    // 마스터/슬레이브 타임코드 동기화 테스트
+    // Master/Slave timecode synchronization test
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     bool TestMasterSlaveSync(float Duration = 5.0f);
 
-    // 다양한 프레임 레이트 테스트
+    // Multiple frame rates test
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     bool TestMultipleFrameRates();
 
-    // 시스템 시간 동기화 테스트
+    // System time synchronization test
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     bool TestSystemTimeSync();
 
 private:
-    // 타임코드 메시지 수신 핸들러 (마스터)
+    // Timecode message reception handler (Master)
     UFUNCTION()
-    void OnMasterMessageReceived(const FTimecodeNetworkMessage& Message);
+    void OnMasterMessageReceived(const FString& Timecode, ETimecodeMessageType MessageType);
 
-    // 타임코드 메시지 수신 핸들러 (슬레이브)
+    // Timecode message reception handler (Slave)
     UFUNCTION()
-    void OnSlaveMessageReceived(const FTimecodeNetworkMessage& Message);
+    void OnSlaveMessageReceived(const FString& Timecode, ETimecodeMessageType MessageType);
 
-    // 멀티 타임코드 테스트 수신 핸들러
+    // Multi-timecode test reception handler
     UFUNCTION()
-    void OnTestTimecodeReceived(const FTimecodeNetworkMessage& Message);
+    void OnTestTimecodeReceived(const FString& Timecode, ETimecodeMessageType MessageType);
 
-    // 시스템 시간 테스트 수신 핸들러
+    // System time test reception handler
     UFUNCTION()
-    void OnSystemTimeMessageReceived(const FTimecodeNetworkMessage& Message);
+    void OnSystemTimeReceived(const FString& Timecode, ETimecodeMessageType MessageType);
 
-    // 로그 헬퍼 함수
+    // Log helper function
     void LogTestResult(const FString& TestName, bool bSuccess, const FString& Message = TEXT(""));
 
-    // 테스트 과정에서 수신한 타임코드 저장 변수
+    // Variables to store received timecodes during testing
     FString CurrentMasterTimecode;
     FString CurrentSlaveTimecode;
     FString TestReceivedTimecode;

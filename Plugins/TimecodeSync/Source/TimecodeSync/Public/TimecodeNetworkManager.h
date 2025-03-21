@@ -15,23 +15,23 @@
 class FSocket;
 class FUdpSocketReceiver;
 
-// 네트워크 연결 상태 열거형
+// Network connection state enum
 UENUM(BlueprintType)
 enum class ENetworkConnectionState : uint8
 {
-    Disconnected,  // 연결되지 않음
-    Connecting,    // 연결 중
-    Connected      // 연결됨
+    Disconnected,  // Not connected
+    Connecting,    // Connecting
+    Connected      // Connected
 };
 
-// 타임코드 메시지 수신 델리게이트
+// Timecode message receive delegate
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeMessageReceived, const FTimecodeNetworkMessage&, Message);
 
-// 네트워크 상태 변경 델리게이트
+// Network state change delegate
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkStateChanged, ENetworkConnectionState, NewState);
 
 /**
- * 타임코드 네트워크 관리자 클래스
+ * Timecode network manager class
  */
 UCLASS(BlueprintType)
 class TIMECODESYNC_API UTimecodeNetworkManager : public UObject
@@ -42,119 +42,119 @@ public:
     UTimecodeNetworkManager();
     virtual ~UTimecodeNetworkManager();
 
-    // 네트워크 초기화 (마스터/슬레이브 모드)
+    // Network initialization (master/slave mode)
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool Initialize(bool bIsMaster, int32 Port);
 
-    // 네트워크 종료
+    // Network shutdown
     UFUNCTION(BlueprintCallable, Category = "Network")
     void Shutdown();
 
-    // 타임코드 메시지 전송
+    // Send timecode message
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool SendTimecodeMessage(const FString& Timecode, ETimecodeMessageType MessageType = ETimecodeMessageType::TimecodeSync);
 
-    // 이벤트 메시지 전송
+    // Send event message
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool SendEventMessage(const FString& EventName, const FString& Timecode);
 
-    // 타겟 IP 설정
+    // Set target IP
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetTargetIP(const FString& IPAddress);
 
-    // 멀티캐스트 그룹 참가
+    // Join multicast group
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool JoinMulticastGroup(const FString& MulticastGroup);
 
-    // 네트워크 상태 확인
+    // Check network state
     UFUNCTION(BlueprintCallable, Category = "Network")
     ENetworkConnectionState GetConnectionState() const;
 
-    // 타임코드 메시지 수신 델리게이트
+    // Timecode message receive delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnTimecodeMessageReceived OnMessageReceived;
 
-    // 네트워크 상태 변경 델리게이트
+    // Network state change delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnNetworkStateChanged OnNetworkStateChanged;
 
-    // 역할 모드 설정/조회 함수
+    // Role mode set/get functions
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetRoleMode(ETimecodeRoleMode NewMode);
 
     UFUNCTION(BlueprintCallable, Category = "Network")
     ETimecodeRoleMode GetRoleMode() const;
 
-    // 수동 마스터 설정 함수
+    // Manual master set/get functions
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetManualMaster(bool bInIsManuallyMaster);
 
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool GetIsManuallyMaster() const;
 
-    // 마스터 IP 설정 함수 (수동 슬레이브 모드용)
+    // Master IP set/get functions (for manual slave mode)
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetMasterIPAddress(const FString& InMasterIP);
 
     UFUNCTION(BlueprintCallable, Category = "Network")
     FString GetMasterIPAddress() const;
 
-    // 역할 모드 변경 델리게이트
+    // Role mode change delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FRoleModeChangedDelegate OnRoleModeChanged;
 
 private:
-    // UDP 소켓
+    // UDP socket
     FSocket* Socket;
 
-    // UDP 리시버
+    // UDP receiver
     FUdpSocketReceiver* Receiver;
 
-    // 연결 상태
+    // Connection state
     ENetworkConnectionState ConnectionState;
 
-    // 송신자 ID (고유 식별자)
+    // Sender ID (unique identifier)
     FString InstanceID;
 
-    // 포트 번호
+    // Port number
     int32 PortNumber;
 
-    // 타겟 IP 주소
+    // Target IP address
     FString TargetIPAddress;
 
-    // 멀티캐스트 그룹 주소
+    // Multicast group address
     FString MulticastGroupAddress;
 
-    // 마스터 모드 여부
+    // Master mode flag
     bool bIsMasterMode;
 
-    // UDP 수신 콜백
+    // UDP receive callback
     void OnUDPReceived(const FArrayReaderPtr& DataPtr, const FIPv4Endpoint& Endpoint);
 
-    // 소켓 생성 함수
+    // Socket creation function
     bool CreateSocket();
 
-    // 메시지 처리 함수
+    // Message processing function
     void ProcessMessage(const FTimecodeNetworkMessage& Message);
 
-    // 연결 상태 설정 함수
+    // Connection state set function
     void SetConnectionState(ENetworkConnectionState NewState);
 
-    // 하트비트 메시지 전송
+    // Send heartbeat message
     void SendHeartbeat();
 
-    // 역할 모드 설정
+    // Role mode setting
     ETimecodeRoleMode RoleMode;
 
-    // 수동 모드 마스터 여부
+    // Manual mode master flag
     bool bIsManuallyMaster;
 
-    // 수동 마스터 IP 주소 (슬레이브 모드용)
+    // Manual master IP address (for slave mode)
     FString MasterIPAddress;
 
-    // 자동 역할 감지 함수
+    // Auto role detection function
     bool AutoDetectRole();
 
-    // 자동 역할 감지 결과 플래그
+    // Auto role detection result flag
     bool bRoleAutomaticallyDetermined;
 };

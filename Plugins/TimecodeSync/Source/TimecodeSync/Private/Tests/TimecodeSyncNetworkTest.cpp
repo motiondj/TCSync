@@ -1,4 +1,4 @@
-// TimecodeSyncNetworkTest.cpp (수정된 버전)
+癤�// TimecodeSyncNetworkTest.cpp (Modified version)
 #include "Tests/TimecodeSyncNetworkTest.h"
 #include "TimecodeNetworkManager.h"
 #include "Misc/AutomationTest.h"
@@ -13,7 +13,7 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
     bool bSuccess = false;
     FString ResultMessage;
 
-    // 소켓 서브시스템 가져오기
+    // Get socket subsystem
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (!SocketSubsystem)
     {
@@ -21,14 +21,14 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
         return false;
     }
 
-    // 송신 소켓 생성
+    // Create sender socket
     FSocket* SenderSocket = FUdpSocketBuilder(TEXT("TimecodeSyncSender"))
         .AsNonBlocking()
         .AsReusable()
         .BoundToPort(Port)
         .WithBroadcast();
 
-    // 수신 소켓 생성
+    // Create receiver socket
     FSocket* ReceiverSocket = FUdpSocketBuilder(TEXT("TimecodeSyncReceiver"))
         .AsNonBlocking()
         .AsReusable()
@@ -44,34 +44,34 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
         return false;
     }
 
-    // 테스트 메시지 준비
+    // Prepare test message
     FString TestMessage = TEXT("TimecodeSyncTest");
     TArray<uint8> SendBuffer;
     SendBuffer.SetNum(TestMessage.Len() + 1);
     memcpy(SendBuffer.GetData(), TCHAR_TO_ANSI(*TestMessage), TestMessage.Len() + 1);
 
-    // 로컬호스트 주소 (127.0.0.1)
+    // Localhost address (127.0.0.1)
     FIPv4Address LocalhostAddr;
     FIPv4Address::Parse(TEXT("127.0.0.1"), LocalhostAddr);
     TSharedRef<FInternetAddr> TargetAddr = SocketSubsystem->CreateInternetAddr();
     TargetAddr->SetIp(LocalhostAddr.Value);
     TargetAddr->SetPort(Port + 1);
 
-    // 메시지 전송
+    // Send message
     int32 BytesSent = 0;
     bool bSendSuccess = SenderSocket->SendTo(SendBuffer.GetData(), SendBuffer.Num(), BytesSent, *TargetAddr);
 
-    // 잠시 대기 (비동기 전송)
+    // Wait for a moment (asynchronous send)
     FPlatformProcess::Sleep(0.1f);
 
-    // 메시지 수신
+    // Receive message
     TArray<uint8> ReceiveBuffer;
     ReceiveBuffer.SetNum(1024);
     int32 BytesRead = 0;
     TSharedRef<FInternetAddr> SenderAddr = SocketSubsystem->CreateInternetAddr();
     bool bRecvSuccess = ReceiverSocket->RecvFrom(ReceiveBuffer.GetData(), ReceiveBuffer.Num(), BytesRead, *SenderAddr);
 
-    // 결과 확인
+    // Check results
     if (bSendSuccess && bRecvSuccess && BytesRead > 0)
     {
         FString ReceivedMessage = ANSI_TO_TCHAR((char*)ReceiveBuffer.GetData());
@@ -84,7 +84,7 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
             bSendSuccess, bRecvSuccess, BytesRead);
     }
 
-    // 소켓 정리
+    // Clean up sockets
     SocketSubsystem->DestroySocket(SenderSocket);
     SocketSubsystem->DestroySocket(ReceiverSocket);
 
@@ -94,7 +94,7 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
 
 bool UTimecodeSyncNetworkTest::TestMessageSerialization()
 {
-    // 임시로 Always Pass 반환 (실제 프로젝트 구조체 확인 필요)
+    // Temporarily return Always Pass (needs actual project structure verification)
     UE_LOG(LogTemp, Warning, TEXT("[TimecodeSyncTest] Message Serialization test not implemented yet - needs actual structure definition"));
     LogTestResult(TEXT("Message Serialization"), true, TEXT("Test skipped - need actual implementation"));
     return true;
@@ -105,7 +105,7 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
     bool bSuccess = false;
     FString ResultMessage;
 
-    // 소켓 서브시스템 가져오기
+    // Get socket subsystem
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (!SocketSubsystem)
     {
@@ -114,14 +114,14 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
         return bSuccess;
     }
 
-    // 송신 소켓 생성
+    // Create sender socket
     FSocket* SenderSocket = FUdpSocketBuilder(TEXT("TimecodeSyncSender"))
         .AsNonBlocking()
         .AsReusable()
         .BoundToPort(12346)
         .WithBroadcast();
 
-    // 수신 소켓 생성
+    // Create receiver socket
     FSocket* ReceiverSocket = FUdpSocketBuilder(TEXT("TimecodeSyncReceiver"))
         .AsNonBlocking()
         .AsReusable()
@@ -138,32 +138,32 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
         return bSuccess;
     }
 
-    // 로컬호스트 주소 (127.0.0.1)
+    // Localhost address (127.0.0.1)
     FIPv4Address LocalhostAddr;
     FIPv4Address::Parse(TEXT("127.0.0.1"), LocalhostAddr);
     TSharedRef<FInternetAddr> TargetAddr = SocketSubsystem->CreateInternetAddr();
     TargetAddr->SetIp(LocalhostAddr.Value);
     TargetAddr->SetPort(12347);
 
-    // 패킷 손실 시뮬레이션
+    // Simulate packet loss
     const int32 TotalPackets = 100;
     int32 SentPackets = 0;
     int32 ReceivedPackets = 0;
 
     for (int32 i = 0; i < TotalPackets; ++i)
     {
-        // 임의로 패킷 손실 결정 (지정된 확률로)
+        // Randomly determine packet loss (based on specified probability)
         bool bShouldSend = FMath::RandRange(0.0f, 100.0f) > LossPercentage;
 
         if (bShouldSend)
         {
-            // 테스트 메시지 준비
+            // Prepare test message
             FString TestMessage = FString::Printf(TEXT("Packet-%d"), i);
             TArray<uint8> SendBuffer;
             SendBuffer.SetNum(TestMessage.Len() + 1);
             memcpy(SendBuffer.GetData(), TCHAR_TO_ANSI(*TestMessage), TestMessage.Len() + 1);
 
-            // 메시지 전송
+            // Send message
             int32 BytesSent = 0;
             bool bSendSuccess = SenderSocket->SendTo(SendBuffer.GetData(), SendBuffer.Num(), BytesSent, *TargetAddr);
 
@@ -173,11 +173,11 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
             }
         }
 
-        // 잠시 대기 (비동기 전송)
+        // Wait for a moment (asynchronous send)
         FPlatformProcess::Sleep(0.01f);
     }
 
-    // 모든 패킷 수신 시도
+    // Try to receive all packets
     for (int32 i = 0; i < SentPackets; ++i)
     {
         TArray<uint8> ReceiveBuffer;
@@ -192,18 +192,18 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
             ReceivedPackets++;
         }
 
-        // 충분한 시간 대기
+        // Wait for sufficient time
         FPlatformProcess::Sleep(0.01f);
     }
 
-    // 결과 확인
+    // Check results
     float ActualLossPercentage = 100.0f * (1.0f - (float)ReceivedPackets / (float)SentPackets);
-    bSuccess = FMath::IsNearlyEqual(ActualLossPercentage, LossPercentage, 10.0f); // 10% 오차 허용
+    bSuccess = FMath::IsNearlyEqual(ActualLossPercentage, LossPercentage, 10.0f); // Allow 10% error margin
 
     ResultMessage = FString::Printf(TEXT("Sent: %d, Received: %d, Expected loss: %.1f%%, Actual loss: %.1f%%"),
         SentPackets, ReceivedPackets, LossPercentage, ActualLossPercentage);
 
-    // 소켓 정리
+    // Clean up sockets
     SocketSubsystem->DestroySocket(SenderSocket);
     SocketSubsystem->DestroySocket(ReceiverSocket);
 
@@ -214,13 +214,13 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
 void UTimecodeSyncNetworkTest::LogTestResult(const FString& TestName, bool bSuccess, const FString& Message)
 {
     FString ResultStr = bSuccess ? TEXT("PASSED") : TEXT("FAILED");
-    // 일반 로그와 화면 메시지 모두 출력
+    // Output to both regular log and screen message
     UE_LOG(LogTemp, Display, TEXT("=============================="));
     UE_LOG(LogTemp, Display, TEXT("[TimecodeSyncTest] %s: %s"), *TestName, *ResultStr);
     UE_LOG(LogTemp, Display, TEXT("%s"), *Message);
     UE_LOG(LogTemp, Display, TEXT("=============================="));
 
-    // 화면에도 메시지 표시 (개발 도중 유용)
+    // Display message on screen (useful during development)
     if (GEngine)
     {
         GEngine->AddOnScreenDebugMessage(-1, 5.0f, bSuccess ? FColor::Green : FColor::Red,

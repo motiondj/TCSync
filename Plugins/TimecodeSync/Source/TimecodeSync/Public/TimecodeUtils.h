@@ -5,7 +5,7 @@
 #include "TimecodeUtils.generated.h"
 
 /**
- * 타임코드 생성 및 처리 유틸리티 클래스
+ * Timecode generation and processing utility class
  */
 UCLASS()
 class TIMECODESYNC_API UTimecodeUtils : public UBlueprintFunctionLibrary
@@ -14,30 +14,30 @@ class TIMECODESYNC_API UTimecodeUtils : public UBlueprintFunctionLibrary
 
 public:
     /**
-     * 시간(초)을 SMPTE 타임코드 문자열로 변환
-     * @param TimeInSeconds - 변환할 시간(초)
-     * @param FrameRate - 프레임 레이트
-     * @param bUseDropFrame - 드롭 프레임 타임코드 사용 여부
-     * @return 형식화된 타임코드 문자열 (HH:MM:SS:FF)
+     * Convert time in seconds to SMPTE timecode string
+     * @param TimeInSeconds - Time in seconds to convert
+     * @param FrameRate - Frame rate
+     * @param bUseDropFrame - Whether to use drop frame timecode
+     * @return Formatted timecode string (HH:MM:SS:FF)
      */
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     static FString SecondsToTimecode(float TimeInSeconds, float FrameRate, bool bUseDropFrame = false);
 
     /**
-     * SMPTE 타임코드 문자열을 시간(초)으로 변환
-     * @param Timecode - 변환할 타임코드 문자열 (HH:MM:SS:FF)
-     * @param FrameRate - 프레임 레이트
-     * @param bUseDropFrame - 드롭 프레임 타임코드 사용 여부
-     * @return 시간(초)
+     * Convert SMPTE timecode string to time in seconds
+     * @param Timecode - Timecode string to convert (HH:MM:SS:FF)
+     * @param FrameRate - Frame rate
+     * @param bUseDropFrame - Whether to use drop frame timecode
+     * @return Time in seconds
      */
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     static float TimecodeToSeconds(const FString& Timecode, float FrameRate, bool bUseDropFrame = false);
 
     /**
-     * 현재 시스템 시간을 타임코드로 변환
-     * @param FrameRate - 프레임 레이트
-     * @param bUseDropFrame - 드롭 프레임 타임코드 사용 여부
-     * @return 현재 시간의 타임코드 문자열
+     * Convert current system time to timecode
+     * @param FrameRate - Frame rate
+     * @param bUseDropFrame - Whether to use drop frame timecode
+     * @return Current time as timecode string
      */
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     static FString GetCurrentSystemTimecode(float FrameRate, bool bUseDropFrame = false);

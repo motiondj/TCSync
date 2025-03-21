@@ -1,4 +1,4 @@
-#pragma once
+癤�#pragma once
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
@@ -6,7 +6,7 @@
 #include "TimecodeNetworkTypes.h"
 
 /**
- * 타임코드 동기화 설정을 위한 에디터 UI
+ * Editor UI for timecode synchronization settings
  */
 class STimecodeSyncEditorUI : public SCompoundWidget
 {
@@ -17,41 +17,41 @@ public:
     void Construct(const FArguments& InArgs);
 
 private:
-    // UI 콘텐츠 생성 함수
+    // UI content creation functions
     TSharedRef<SWidget> CreateContentArea();
 
-    // 역할 설정 섹션 생성 함수
+    // Role settings section creation function
     TSharedRef<SWidget> CreateRoleSettingsSection();
 
-    // 네트워크 설정 섹션 생성 함수
+    // Network settings section creation function
     TSharedRef<SWidget> CreateNetworkSettingsSection();
 
-    // 타임코드 설정 섹션 생성 함수
+    // Timecode settings section creation function
     TSharedRef<SWidget> CreateTimecodeSettingsSection();
 
-    // 상태 모니터링 섹션 생성 함수
+    // Status monitoring section creation function
     TSharedRef<SWidget> CreateMonitoringSection();
 
-    // UI 업데이트 함수
+    // UI update function
     void UpdateUI();
 
-    // 콜백 함수
+    // Callback functions
     void OnRoleModeChanged(ETimecodeRoleMode NewMode);
     void OnManualMasterChanged(bool bNewValue);
     void OnMasterIPAddressChanged(const FText& NewText, ETextCommit::Type CommitType);
 
-    // 설정 관련 함수
+    // Settings related functions
     UTimecodeSettings* GetTimecodeSettings() const;
     void SaveSettings();
 
-    // 역할 모드 텍스트 얻기
+    // Get role mode text
     FText GetRoleModeText() const;
     FText GetManualRoleText() const;
 
-    // 자동/수동 표시용 세부 섹션 가시성 
+    // Visibility for automatic/manual detail sections
     EVisibility GetManualRoleSettingsVisibility() const;
     EVisibility GetManualSlaveSettingsVisibility() const;
 
-    // 타이머 핸들
+    // Timer handle
     FDelegateHandle TickDelegateHandle;
 };

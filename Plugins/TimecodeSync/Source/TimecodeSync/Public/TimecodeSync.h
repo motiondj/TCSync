@@ -11,6 +11,6 @@ public:
     virtual void ShutdownModule() override;
 
 private:
-    /** 설정 로드 함수 */
+    /** Settings load function */
     void LoadSettings();
 };

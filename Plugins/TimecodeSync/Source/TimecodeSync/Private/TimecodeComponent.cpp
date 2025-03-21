@@ -3,7 +3,7 @@
 #include "TimecodeSettings.h"
 #include "Engine/World.h"
 
-// nDisplay 모듈 포함 여부 확인
+// Check if nDisplay module is included
 #if !defined(WITH_DISPLAYCLUSTER)
 #define WITH_DISPLAYCLUSTER 0
 #endif
@@ -15,36 +15,36 @@
 #include "IDisplayClusterClusterManager.h"
 #endif
 
-// 로그 카테고리 정의
+// Define log category
 DEFINE_LOG_CATEGORY_STATIC(LogTimecodeComponent, Log, All);
 
 UTimecodeComponent::UTimecodeComponent()
 {
-    // 컴포넌트 설정
+    // Component settings
     PrimaryComponentTick.bCanEverTick = true;
 
-    // 기본값 설정
+    // Set default values
     const UTimecodeSettings* Settings = GetDefault<UTimecodeSettings>();
 
-    // 역할 관련 설정 초기화
+    // Initialize role-related settings
     RoleMode = Settings ? Settings->RoleMode : ETimecodeRoleMode::Automatic;
     bIsMaster = false;
     bIsManuallyMaster = Settings ? Settings->bIsManualMaster : false;
     MasterIPAddress = Settings ? Settings->MasterIPAddress : TEXT("");
     bUseNDisplay = Settings ? Settings->bEnableNDisplayIntegration : false;
 
-    // 타임코드 관련 설정 초기화
+    // Initialize timecode-related settings
     FrameRate = Settings ? Settings->FrameRate : 30.0f;
     bUseDropFrameTimecode = Settings ? Settings->bUseDropFrameTimecode : false;
     bAutoStart = Settings ? Settings->bAutoStartTimecode : true;
 
-    // 네트워크 설정 초기화
+    // Initialize network settings
     UDPPort = Settings ? Settings->DefaultUDPPort : 10000;
     TargetIP = TEXT("");
     MulticastGroup = Settings ? Settings->MulticastGroupAddress : TEXT("239.0.0.1");
-    SyncInterval = Settings ? Settings->BroadcastInterval : 0.033f; // 약 30Hz
+    SyncInterval = Settings ? Settings->BroadcastInterval : 0.033f; // Approximately 30Hz
 
-    // 내부 변수 초기화
+    // Initialize internal variables
     bIsRunning = false;
     ElapsedTimeSeconds = 0.0f;
     CurrentTimecode = TEXT("00:00:00:00");
@@ -59,7 +59,7 @@ void UTimecodeComponent::BeginPlay()
 
     UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component initialized"), *GetOwner()->GetName());
 
-    // 설정에 따라 역할 결정
+    // Determine role based on settings
     if (RoleMode == ETimecodeRoleMode::Automatic)
     {
         if (bUseNDisplay)
@@ -76,10 +76,10 @@ void UTimecodeComponent::BeginPlay()
             *GetOwner()->GetName(), bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
     }
 
-    // 네트워크 설정
+    // Setup network
     SetupNetwork();
 
-    // 자동 시작 설정
+    // Auto start setting
     if (bAutoStart)
     {
         StartTimecode();
@@ -88,7 +88,7 @@ void UTimecodeComponent::BeginPlay()
 
 void UTimecodeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // 네트워크 종료
+    // Shutdown network
     ShutdownNetwork();
 
     UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component shutdown"), *GetOwner()->GetName());
@@ -100,19 +100,19 @@ void UTimecodeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // 타임코드 실행 중인 경우 업데이트
+    // Update timecode if running
     if (bIsRunning)
     {
-        // 마스터 모드에서만 타임코드 업데이트
+        // Update timecode only in master mode
         if (bIsMaster)
         {
             UpdateTimecode(DeltaTime);
         }
 
-        // 이벤트 확인은 마스터/슬레이브 모두 수행
+        // Check events for both master and slave
         CheckTimecodeEvents();
 
-        // 네트워크 동기화 타이머 업데이트 (마스터만)
+        // Update network sync timer (master only)
         if (bIsMaster && NetworkManager)
         {
             SyncTimer += DeltaTime;
@@ -147,13 +147,13 @@ void UTimecodeComponent::ResetTimecode()
 {
     ElapsedTimeSeconds = 0.0f;
 
-    // 타임코드 문자열 업데이트
+    // Update timecode string
     CurrentTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
 
-    // 이벤트 트리거 상태 초기화
+    // Reset event trigger states
     TriggeredEvents.Empty();
 
-    // 타임코드 변경 이벤트 발생
+    // Trigger timecode change event
     OnTimecodeChanged.Broadcast(CurrentTimecode);
 
     UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode reset"), *GetOwner()->GetName());
@@ -225,14 +225,14 @@ ENetworkConnectionState UTimecodeComponent::GetNetworkConnectionState() const
 
 bool UTimecodeComponent::SetupNetwork()
 {
-    // 기존 네트워크 매니저 종료
+    // Shutdown existing network manager
     ShutdownNetwork();
 
-    // 네트워크 매니저 생성
+    // Create network manager
     NetworkManager = NewObject<UTimecodeNetworkManager>(this);
     if (NetworkManager)
     {
-        // 역할 관련 설정 먼저 적용
+        // Apply role settings first
         NetworkManager->SetRoleMode(RoleMode);
 
         if (RoleMode == ETimecodeRoleMode::Manual)
@@ -245,27 +245,27 @@ bool UTimecodeComponent::SetupNetwork()
             }
         }
 
-        // 콜백 설정
+        // Setup callbacks
         NetworkManager->OnMessageReceived.AddDynamic(this, &UTimecodeComponent::OnTimecodeMessageReceived);
         NetworkManager->OnNetworkStateChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkStateChanged);
         NetworkManager->OnRoleModeChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkRoleModeChanged);
 
-        // 네트워크 초기화
+        // Initialize network
         bool bSuccess = NetworkManager->Initialize(bIsMaster, UDPPort);
 
-        // 타겟 IP 설정
+        // Set target IP
         if (!TargetIP.IsEmpty())
         {
             NetworkManager->SetTargetIP(TargetIP);
         }
 
-        // 멀티캐스트 그룹 참가
+        // Join multicast group
         if (!MulticastGroup.IsEmpty())
         {
             NetworkManager->JoinMulticastGroup(MulticastGroup);
         }
 
-        // 연결 상태 업데이트
+        // Update connection state
         ConnectionState = NetworkManager->GetConnectionState();
 
         UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network setup %s"),
@@ -333,14 +333,14 @@ void UTimecodeComponent::SetRoleMode(ETimecodeRoleMode NewMode)
             (OldMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"),
             (RoleMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"));
 
-        // 네트워크 매니저에 역할 모드 설정
+        // Set role mode in network manager
         if (NetworkManager)
         {
             NetworkManager->SetRoleMode(RoleMode);
         }
         else
         {
-            // 네트워크 매니저가 없으면 직접 역할 결정
+            // Determine role directly if network manager is not available
             bool bOldMaster = bIsMaster;
 
             if (RoleMode == ETimecodeRoleMode::Automatic)
@@ -351,8 +351,8 @@ void UTimecodeComponent::SetRoleMode(ETimecodeRoleMode NewMode)
                 }
                 else
                 {
-                    // 간단한 자동 역할 결정 (구현에 따라 달라짐)
-                    bIsMaster = false; // 기본값은 슬레이브
+                    // Simple automatic role determination (implementation may vary)
+                    bIsMaster = false; // Default to slave
                 }
             }
             else // Manual
@@ -360,14 +360,14 @@ void UTimecodeComponent::SetRoleMode(ETimecodeRoleMode NewMode)
                 bIsMaster = bIsManuallyMaster;
             }
 
-            // 역할이 변경되었으면 이벤트 발생
+            // Trigger role change event if role changed
             if (bOldMaster != bIsMaster)
             {
                 OnRoleStateChanged(bIsMaster);
             }
         }
 
-        // 역할 모드 변경 이벤트 발생
+        // Trigger role mode change event
         OnRoleModeChanged.Broadcast(RoleMode);
     }
 }
@@ -386,18 +386,18 @@ void UTimecodeComponent::SetManualMaster(bool bInIsManuallyMaster)
         UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Manual master setting changed to: %s"),
             *GetOwner()->GetName(), bIsManuallyMaster ? TEXT("MASTER") : TEXT("SLAVE"));
 
-        // 네트워크 매니저에 수동 마스터 설정
+        // Set role mode in network manager
         if (NetworkManager)
         {
             NetworkManager->SetManualMaster(bIsManuallyMaster);
         }
         else if (RoleMode == ETimecodeRoleMode::Manual)
         {
-            // 네트워크 매니저가 없고 수동 모드인 경우 직접 역할 설정
+            // Determine role directly if network manager is not available
             bool bOldMaster = bIsMaster;
             bIsMaster = bIsManuallyMaster;
 
-            // 역할이 변경되었으면 이벤트 발생
+            // Trigger role change event if role changed
             if (bOldMaster != bIsMaster)
             {
                 OnRoleStateChanged(bIsMaster);
@@ -420,7 +420,7 @@ void UTimecodeComponent::SetMasterIPAddress(const FString& InMasterIP)
         UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Master IP address changed to: %s"),
             *GetOwner()->GetName(), *MasterIPAddress);
 
-        // 네트워크 매니저에 마스터 IP 설정
+        // Set master IP address in network manager
         if (NetworkManager)
         {
             NetworkManager->SetMasterIPAddress(MasterIPAddress);
@@ -440,13 +440,13 @@ bool UTimecodeComponent::GetIsMaster() const
 
 void UTimecodeComponent::UpdateTimecode(float DeltaTime)
 {
-    // 경과 시간 업데이트
+    // Update elapsed time
     ElapsedTimeSeconds += DeltaTime;
 
-    // 타임코드 생성
+    // Generate timecode
     FString NewTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
 
-    // 타임코드가 변경된 경우 이벤트 발생
+    // Trigger event if timecode changed
     if (NewTimecode != CurrentTimecode)
     {
         CurrentTimecode = NewTimecode;
@@ -459,22 +459,22 @@ void UTimecodeComponent::UpdateTimecode(float DeltaTime)
 
 void UTimecodeComponent::CheckTimecodeEvents()
 {
-    // 등록된 모든 이벤트 확인
+    // Check all registered events
     for (const auto& Event : TimecodeEvents)
     {
         const FString& EventName = Event.Key;
         float EventTime = Event.Value;
 
-        // 아직 트리거되지 않은 이벤트이고, 현재 시간이 이벤트 시간을 지났는지 확인
+        // Check if event is not triggered and current time has passed event time
         if (!TriggeredEvents.Contains(EventName) && ElapsedTimeSeconds >= EventTime)
         {
-            // 이벤트 트리거
+            // Trigger event
             OnTimecodeEventTriggered.Broadcast(EventName, EventTime);
 
-            // 트리거된 이벤트로 표시
+            // Mark as triggered
             TriggeredEvents.Add(EventName);
 
-            // 이벤트 네트워크 브로드캐스트 (마스터 모드에서만)
+            // Broadcast event over network (master mode only)
             if (bIsMaster && NetworkManager)
             {
                 NetworkManager->SendEventMessage(EventName, CurrentTimecode);
@@ -490,7 +490,7 @@ void UTimecodeComponent::SyncOverNetwork()
 {
     if (NetworkManager && bIsMaster)
     {
-        // 현재 타임코드 네트워크로 전송
+        // Send current timecode over network
         NetworkManager->SendTimecodeMessage(CurrentTimecode, ETimecodeMessageType::TimecodeSync);
 
         UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Timecode synced over network: %s"),
@@ -500,26 +500,26 @@ void UTimecodeComponent::SyncOverNetwork()
 
 void UTimecodeComponent::OnRoleStateChanged(bool bNewIsMaster)
 {
-    // 역할이 변경된 경우 처리
+    // Handle role change
     bIsMaster = bNewIsMaster;
 
-    // 역할 변경 이벤트 발생
+    // Trigger role change event
     OnRoleChanged.Broadcast(bIsMaster);
 
     UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Role changed to: %s"),
         *GetOwner()->GetName(), bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
 
-    // 마스터 변경 시 타임코드 관련 처리
+    // Handle timecode-related tasks on master change
     if (bIsRunning)
     {
         if (bIsMaster)
         {
-            // 마스터가 된 경우 타임코드 즉시 동기화
+            // Sync timecode immediately when becoming master
             SyncOverNetwork();
         }
         else
         {
-            // 슬레이브가 된 경우 로컬 변경 중지 (마스터에서 수신한 타임코드 사용)
+            // Stop local changes when becoming slave (use timecode received from master)
         }
     }
 }
@@ -527,14 +527,14 @@ void UTimecodeComponent::OnRoleStateChanged(bool bNewIsMaster)
 bool UTimecodeComponent::CheckNDisplayRole()
 {
 #if WITH_DISPLAYCLUSTER
-    // nDisplay 모듈이 있는 경우
+    // If nDisplay module is available
     if (IDisplayCluster::IsAvailable())
     {
-        // nDisplay 클러스터 매니저 가져오기
+        // Get nDisplay cluster manager
         IDisplayClusterClusterManager* ClusterManager = IDisplayCluster::Get().GetClusterMgr();
         if (ClusterManager)
         {
-            // 현재 노드가 마스터인지 확인
+            // Check if current node is master
             bool bIsNDisplayMaster = ClusterManager->IsMaster();
 
             UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] nDisplay role: %s"),
@@ -545,7 +545,7 @@ bool UTimecodeComponent::CheckNDisplayRole()
     }
 #endif
 
-    // nDisplay가 없거나 사용할 수 없는 경우 기본값 반환
+    // Return default value if nDisplay is not available or cannot be used
     UE_LOG(LogTimecodeComponent, Warning, TEXT("[%s] Cannot determine nDisplay role, defaulting to SLAVE"),
         *GetOwner()->GetName());
     return false;
@@ -553,21 +553,21 @@ bool UTimecodeComponent::CheckNDisplayRole()
 
 void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
 {
-    // 슬레이브 모드에서만 메시지 처리
+    // Process messages only in slave mode
     if (!bIsMaster)
     {
         switch (Message.MessageType)
         {
         case ETimecodeMessageType::TimecodeSync:
-            // 타임코드 동기화 메시지 처리
+            // Process timecode sync message
             if (Message.Timecode != CurrentTimecode)
             {
                 CurrentTimecode = Message.Timecode;
 
-                // 타임코드 문자열을 시간(초)으로 변환
+                // Convert timecode string to seconds
                 ElapsedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
 
-                // 타임코드 변경 이벤트 발생
+                // Trigger timecode change event
                 OnTimecodeChanged.Broadcast(CurrentTimecode);
 
                 UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Received timecode sync: %s"),
@@ -576,17 +576,17 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             break;
 
         case ETimecodeMessageType::Event:
-            // 이벤트 메시지 처리
+            // Process event message
             if (!Message.Data.IsEmpty())
             {
-                // 이벤트 이름으로 이벤트 시간 찾기
+                // Find event time by event name
                 float* EventTimePtr = TimecodeEvents.Find(Message.Data);
                 float EventTime = EventTimePtr ? *EventTimePtr : ElapsedTimeSeconds;
 
-                // 이벤트 트리거
+                // Trigger event
                 OnTimecodeEventTriggered.Broadcast(Message.Data, EventTime);
 
-                // 트리거된 이벤트로 표시
+                // Mark as triggered
                 TriggeredEvents.Add(Message.Data);
 
                 UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Received timecode event: %s"),
@@ -595,7 +595,7 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             break;
 
         case ETimecodeMessageType::RoleAssignment:
-            // 역할 할당 메시지 처리 (자동 모드에서만)
+            // Process role assignment message (automatic mode only)
             if (RoleMode == ETimecodeRoleMode::Automatic)
             {
                 if (Message.Data.Equals(TEXT("MASTER"), ESearchCase::IgnoreCase))
@@ -620,7 +620,7 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             break;
 
         default:
-            // 기타 메시지 타입 무시
+            // Ignore other message types
             break;
         }
     }
@@ -628,10 +628,10 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
 
 void UTimecodeComponent::OnNetworkStateChanged(ENetworkConnectionState NewState)
 {
-    // 네트워크 상태 업데이트
+    // Update network state
     ConnectionState = NewState;
 
-    // 네트워크 상태 변경 이벤트 발생
+    // Trigger network state change event
     OnNetworkConnectionChanged.Broadcast(ConnectionState);
 
     UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network connection state changed: %s"),
@@ -640,7 +640,7 @@ void UTimecodeComponent::OnNetworkStateChanged(ENetworkConnectionState NewState)
         ConnectionState == ENetworkConnectionState::Connecting ? TEXT("Connecting") :
         TEXT("Disconnected"));
 
-    // 연결이 끊어진 경우 처리
+    // Handle disconnection
     if (ConnectionState == ENetworkConnectionState::Disconnected)
     {
         if (!bIsMaster && bIsRunning)
@@ -654,12 +654,12 @@ void UTimecodeComponent::OnNetworkStateChanged(ENetworkConnectionState NewState)
 
 void UTimecodeComponent::OnNetworkRoleModeChanged(ETimecodeRoleMode NewMode)
 {
-    // 네트워크 매니저의 역할 모드가 변경된 경우 컴포넌트에도 적용
+    // Apply network manager's role mode change to component
     if (RoleMode != NewMode)
     {
         RoleMode = NewMode;
 
-        // 역할 모드 변경 이벤트 발생
+        // Trigger role mode change event
         OnRoleModeChanged.Broadcast(RoleMode);
 
         UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Role mode changed by network: %s"),

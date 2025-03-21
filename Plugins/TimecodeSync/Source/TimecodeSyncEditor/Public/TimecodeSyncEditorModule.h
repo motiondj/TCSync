@@ -1,4 +1,4 @@
-#pragma once
+癤�#pragma once
 
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
@@ -11,29 +11,29 @@ class SDockTab;
 class FTimecodeSyncEditorModule : public IModuleInterface
 {
 public:
-    // IModuleInterface 구현
+    // IModuleInterface implementation
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 
-    // 에디터 UI 탭 생성 함수
+    // Editor UI tab creation function
     TSharedRef<SDockTab> SpawnTimecodeSyncTab(const FSpawnTabArgs& SpawnTabArgs);
 
 private:
-    // 플러그인 메뉴 및 툴바 확장
+    // Plugin menu and toolbar extension
     void RegisterMenus();
 
-    // 에디터 명령어 바인딩
+    // Editor command binding
     void RegisterCommands();
 
-    // 타임코드 에디터 탭 열기
+    // Open timecode editor tab
     void OpenTimecodeSyncTab();
 
-    // 탭 매니저 등록 처리
+    // Tab manager registration handler
     TSharedPtr<FTabManager::FLayout> EditorLayout;
 
-    // 탭 스폰 델리게이트
+    // Tab spawn delegate
     FOnSpawnTab TimecodeSyncTabSpawnerDelegate;
 
-    // 탭 ID
+    // Tab ID
     static const FName TimecodeSyncTabId;
 };

@@ -2,23 +2,23 @@
 
 UTimecodeSettings::UTimecodeSettings()
 {
-    // 기본값 설정
+    // Set default values
     FrameRate = 30.0f;
     bUseDropFrameTimecode = false;
     DefaultUDPPort = 10000;
     MulticastGroupAddress = "239.0.0.1";
-    BroadcastInterval = 0.033f; // 약 30Hz
+    BroadcastInterval = 0.033f; // Approximately 30Hz
 
-    // 역할 관련 기본 설정
+    // Default role settings
     RoleMode = ETimecodeRoleMode::Automatic;
     bIsManualMaster = false;
     MasterIPAddress = "";
 
-    // nDisplay 관련 기본 설정
+    // Default nDisplay settings
     bEnableNDisplayIntegration = false;
     bUseNDisplayRoleAssignment = true;
 
-    // 고급 설정 기본값
+    // Default advanced settings
     bAutoStartTimecode = true;
     bEnablePacketLossCompensation = true;
     bEnableNetworkLatencyCompensation = true;
@@ -45,22 +45,22 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
 
-    // 속성 변경 시 유효성 검사 및 로직 처리
+    // Validate and process logic when properties change
     const FName PropertyName = (PropertyChangedEvent.Property != nullptr)
         ? PropertyChangedEvent.Property->GetFName()
         : NAME_None;
 
-    // 프레임 레이트 유효성 검사
+    // Validate frame rate
     if (PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeSettings, FrameRate))
     {
-        // 프레임 레이트가 너무 낮거나 높으면 경고
+        // Warn if frame rate is too low or high
         if (FrameRate < 1.0f || FrameRate > 240.0f)
         {
             UE_LOG(LogTemp, Warning, TEXT("FrameRate should be between 1.0 and 240.0"));
             FrameRate = FMath::Clamp(FrameRate, 1.0f, 240.0f);
         }
 
-        // 드롭 프레임 타임코드는 주로 29.97fps 또는 59.94fps에서 사용됨
+        // Drop frame timecode is typically used with 29.97fps or 59.94fps
         if (bUseDropFrameTimecode)
         {
             if (!FMath::IsNearlyEqual(FrameRate, 29.97f) && !FMath::IsNearlyEqual(FrameRate, 59.94f))
@@ -70,12 +70,12 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
         }
     }
 
-    // 드롭 프레임 타임코드 설정 변경 시
+    // When drop frame timecode setting changes
     else if (PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeSettings, bUseDropFrameTimecode))
     {
         if (bUseDropFrameTimecode)
         {
-            // 드롭 프레임은 주로 29.97fps 또는 59.94fps에서 사용됨
+            // Drop frame is typically used with 29.97fps or 59.94fps
             if (!FMath::IsNearlyEqual(FrameRate, 29.97f) && !FMath::IsNearlyEqual(FrameRate, 59.94f))
             {
                 UE_LOG(LogTemp, Warning, TEXT("Drop frame timecode is typically used with 29.97fps or 59.94fps"));
@@ -83,14 +83,14 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
         }
     }
 
-    // 역할 모드 변경 시
+    // When role mode changes
     else if (PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeSettings, RoleMode))
     {
         if (RoleMode == ETimecodeRoleMode::Manual)
         {
             UE_LOG(LogTemp, Log, TEXT("Switched to manual role mode"));
 
-            // 수동 모드에서 마스터 IP가 비어 있고 슬레이브로 설정된 경우 경고
+            // Warn if master IP is empty in manual slave mode
             if (!bIsManualMaster && MasterIPAddress.IsEmpty())
             {
                 UE_LOG(LogTemp, Warning, TEXT("Manual slave mode requires a Master IP address"));
@@ -102,7 +102,7 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
         }
     }
 
-    // 수동 마스터 설정 변경 시
+    // When manual master setting changes
     else if (PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeSettings, bIsManualMaster))
     {
         if (RoleMode == ETimecodeRoleMode::Manual)
@@ -110,7 +110,7 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
             UE_LOG(LogTemp, Log, TEXT("Manual master setting changed to: %s"),
                 bIsManualMaster ? TEXT("MASTER") : TEXT("SLAVE"));
 
-            // 슬레이브로 변경됐는데 마스터 IP가 비어 있으면 경고
+            // Warn if master IP is empty when switching to slave
             if (!bIsManualMaster && MasterIPAddress.IsEmpty())
             {
                 UE_LOG(LogTemp, Warning, TEXT("Manual slave mode requires a Master IP address"));
@@ -118,7 +118,7 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
         }
     }
 
-    // 마스터 IP 주소 변경 시
+    // When master IP address changes
     else if (PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeSettings, MasterIPAddress))
     {
         if (RoleMode == ETimecodeRoleMode::Manual && !bIsManualMaster)
@@ -131,7 +131,7 @@ void UTimecodeSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyCh
             {
                 UE_LOG(LogTemp, Log, TEXT("Master IP address set to: %s"), *MasterIPAddress);
 
-                // 간단한 IP 형식 검증 (더 엄격한 검증이 필요할 수 있음)
+                // Simple IP format validation (more strict validation may be needed)
                 TArray<FString> IPParts;
                 MasterIPAddress.ParseIntoArray(IPParts, TEXT("."), true);
 

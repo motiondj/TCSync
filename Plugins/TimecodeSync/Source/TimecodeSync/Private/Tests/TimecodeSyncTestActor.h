@@ -1,4 +1,4 @@
-// TimecodeSyncTestActor.h
+癤�// TimecodeSyncTestActor.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -13,15 +13,15 @@ class TIMECODESYNC_API ATimecodeSyncTestActor : public AActor
 public:
     ATimecodeSyncTestActor();
 
-    // 테스트 종류 선택
+    // Select test type
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test Settings")
     int32 TestType;
 
-    // UDP 연결 테스트 포트
+    // UDP connection test port
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test Settings")
     int32 UDPPort;
 
-    // 마스터/슬레이브 테스트 실행 시간
+    // Master/Slave test execution duration
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test Settings")
     float SyncDuration;
 
@@ -29,11 +29,11 @@ protected:
     virtual void BeginPlay() override;
 
 public:
-    // 테스트 수동 실행 함수
+    // Manual test execution function
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     void RunSelectedTest();
 
-    // 모든 테스트 실행
+    // Run all tests
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     void RunAllTests();
 };

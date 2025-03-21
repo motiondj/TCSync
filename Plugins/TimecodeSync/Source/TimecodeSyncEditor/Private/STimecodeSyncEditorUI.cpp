@@ -1,4 +1,4 @@
-#include "STimecodeSyncEditorUI.h"
+Ôªø#include "STimecodeSyncEditorUI.h"
 #include "TimecodeSettings.h"
 #include "EditorStyleSet.h"
 #include "IDetailsView.h"
@@ -17,7 +17,7 @@
 
 void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
 {
-    // ∏ﬁ¿Œ UI ª˝º∫
+    // Create main UI
     ChildSlot
         [
             SNew(SBorder)
@@ -32,19 +32,19 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
                 ]
         ];
 
-    // UI √ ±‚»≠
+    // Initialize UI
     UpdateUI();
 
-    // ¡÷±‚¿˚ æ˜µ•¿Ã∆Æ∏¶ ¿ß«— ∆Ω µÓ∑œ
+    // Register tick for periodic updates
     TickDelegateHandle = FTSTicker::GetCoreTicker().AddTicker(
         FTickerDelegate::CreateLambda(
             [this](float DeltaTime) -> bool
             {
                 UpdateUI();
-                return true; // ∞Ëº” ∆Ω
+                return true; // Continue tick
             }
         ),
-        0.5f // 0.5√ ∏∂¥Ÿ æ˜µ•¿Ã∆Æ
+        0.5f // Update every 0.5 seconds
     );
 }
 
@@ -52,7 +52,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
 {
     return SNew(SVerticalBox)
 
-        // ¡¶∏Ò
+        // Title
         + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 0, 0, 10)
@@ -62,7 +62,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
                 .Text(LOCTEXT("TimecodeSyncTitle", "Timecode Sync Settings"))
         ]
 
-        // ø™«“ º≥¡§ ºΩº«
+        // Role settings section
         + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
@@ -70,24 +70,24 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
             CreateRoleSettingsSection()
         ]
 
-    // ≥◊∆Æøˆ≈© º≥¡§ ºΩº«
-    + SVerticalBox::Slot()
+        // Network settings section
+        + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
         [
             CreateNetworkSettingsSection()
         ]
 
-    // ≈∏¿”ƒ⁄µÂ º≥¡§ ºΩº«
-    + SVerticalBox::Slot()
+        // Timecode settings section
+        + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
         [
             CreateTimecodeSettingsSection()
         ]
 
-    // ∏¥œ≈Õ∏µ ºΩº«
-    + SVerticalBox::Slot()
+        // Monitoring section
+        + SVerticalBox::Slot()
         .AutoHeight()
         .Padding(0, 5)
         [
@@ -97,7 +97,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
 {
-    // ø™«“ ∏µÂ º±≈√¿ª ¿ß«— ƒﬁ∫∏π⁄Ω∫ ø…º«
+    // ComboBox options for role mode selection
     TArray<TSharedPtr<FText>> RoleModeOptions;
     RoleModeOptions.Add(MakeShareable(new FText(LOCTEXT("AutomaticMode", "Automatic Detection"))));
     RoleModeOptions.Add(MakeShareable(new FText(LOCTEXT("ManualMode", "Manual Setting"))));
@@ -108,7 +108,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
         [
             SNew(SVerticalBox)
 
-                // ºΩº« ¡¶∏Ò
+                // Section title
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
@@ -118,14 +118,14 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                         .Text(LOCTEXT("RoleSettingsTitle", "Role Settings"))
                 ]
 
-                // ø™«“ ∏µÂ º±≈√
+                // Role mode selection
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
                 [
                     SNew(SHorizontalBox)
 
-                        // ∂Û∫ß
+                        // Label
                         + SHorizontalBox::Slot()
                         .AutoWidth()
                         .VAlign(VAlign_Center)
@@ -136,7 +136,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                                 .MinDesiredWidth(120)
                         ]
 
-                        // ƒﬁ∫∏π⁄Ω∫
+                        // ComboBox
                         + SHorizontalBox::Slot()
                         .FillWidth(1.0f)
                         [
@@ -172,7 +172,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                         ]
                 ]
 
-                // ºˆµø ø™«“ º≥¡§ (¡∂∞«∫Œ «•Ω√)
+                // Manual role settings (conditional display)
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
@@ -183,7 +183,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                         [
                             SNew(SHorizontalBox)
 
-                                // ∂Û∫ß
+                                // Label
                                 + SHorizontalBox::Slot()
                                 .AutoWidth()
                                 .VAlign(VAlign_Center)
@@ -194,7 +194,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                                         .MinDesiredWidth(120)
                                 ]
 
-                                // √º≈©π⁄Ω∫ (Master)
+                                // CheckBox (Master)
                                 + SHorizontalBox::Slot()
                                 .AutoWidth()
                                 [
@@ -211,7 +211,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                                             })
                                 ]
 
-                                // Master ≈ÿΩ∫∆Æ
+                                // Master text
                                 + SHorizontalBox::Slot()
                                 .AutoWidth()
                                 .VAlign(VAlign_Center)
@@ -223,7 +223,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                         ]
                 ]
 
-                // ºˆµø ΩΩ∑π¿Ã∫Í ∏µÂ IP º≥¡§ (¡∂∞«∫Œ «•Ω√)
+                // Manual slave mode IP settings (conditional display)
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
@@ -233,7 +233,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                         [
                             SNew(SHorizontalBox)
 
-                                // ∂Û∫ß
+                                // Label
                                 + SHorizontalBox::Slot()
                                 .AutoWidth()
                                 .VAlign(VAlign_Center)
@@ -244,56 +244,30 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                                         .MinDesiredWidth(120)
                                 ]
 
-                                // IP ¿‘∑¬ « µÂ
+                                // IP input field
                                 + SHorizontalBox::Slot()
                                 .FillWidth(1.0f)
                                 [
                                     SNew(SEditableTextBox)
-                                        .Text_Lambda([this]()
-                                            {
-                                                UTimecodeSettings* Settings = GetTimecodeSettings();
-                                                return FText::FromString(Settings ? Settings->MasterIPAddress : TEXT(""));
-                                            })
-                                        .OnTextCommitted(this, &STimecodeSyncEditorUI::OnMasterIPAddressChanged)
-                                        .ToolTipText(LOCTEXT("MasterIPTooltip", "IP address of the Master node (e.g. 192.168.1.100)"))
+                                        .Text(this, &STimecodeSyncEditorUI::GetMasterIPText)
+                                        .OnTextCommitted(this, &STimecodeSyncEditorUI::OnMasterIPCommitted)
+                                        .HintText(LOCTEXT("MasterIPHint", "Enter master IP address"))
                                 ]
                         ]
-                ]
-
-                // «ˆ¿Á ø™«“ «•Ω√
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0, 10, 0, 0)
-                [
-                    SNew(STextBlock)
-                        .Text_Lambda([this]()
-                            {
-                                UTimecodeSettings* Settings = GetTimecodeSettings();
-                                if (!Settings)
-                                    return FText::FromString(TEXT("Current role: Unknown"));
-
-                                if (Settings->RoleMode == ETimecodeRoleMode::Automatic)
-                                    return FText::FromString(TEXT("Current role: Auto-detected (run-time determined)"));
-                                else
-                                    return FText::FromString(FString::Printf(
-                                        TEXT("Current role: %s"),
-                                        Settings->bIsManualMaster ? TEXT("MASTER") : TEXT("SLAVE")));
-                            })
-                        .ColorAndOpacity(FLinearColor(0.5f, 0.5f, 1.0f))
                 ]
         ];
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
 {
-    // ∞£¥‹«— ≥◊∆Æøˆ≈© º≥¡§ ºΩº« ±∏«ˆ
+    // Simple network settings section implementation
     return SNew(SBorder)
         .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
 
-                // ºΩº« ¡¶∏Ò
+                // Section title
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
@@ -303,21 +277,26 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
                         .Text(LOCTEXT("NetworkSettingsTitle", "Network Settings"))
                 ]
 
-                // ø©±‚ø° ≥◊∆Æøˆ≈© º≥¡§ UI √ﬂ∞°
-                // (UDP ∆˜∆Æ, ∏÷∆ºƒ≥Ω∫∆Æ ±◊∑Ï µÓ)
+                // Add network settings UI here (UDP port, multicast group, etc.)
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SBox)
+                ]
         ];
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateTimecodeSettingsSection()
 {
-    // ∞£¥‹«— ≈∏¿”ƒ⁄µÂ º≥¡§ ºΩº« ±∏«ˆ
+    // Simple timecode settings section implementation
     return SNew(SBorder)
         .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
 
-                // ºΩº« ¡¶∏Ò
+                // Section title
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
@@ -327,38 +306,48 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateTimecodeSettingsSection()
                         .Text(LOCTEXT("TimecodeSettingsTitle", "Timecode Settings"))
                 ]
 
-                // ø©±‚ø° ≈∏¿”ƒ⁄µÂ º≥¡§ UI √ﬂ∞°
-                // («¡∑π¿” ∑π¿Ã∆Æ, µÂ∑” «¡∑π¿” µÓ)
+                // Add timecode settings UI here (frame rate, drop frame, etc.)
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SBox)
+                ]
         ];
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
 {
-    // ∞£¥‹«— ∏¥œ≈Õ∏µ ºΩº« ±∏«ˆ
+    // Simple monitoring section implementation
     return SNew(SBorder)
         .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
 
-                // ºΩº« ¡¶∏Ò
+                // Section title
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 0, 0, 5)
                 [
                     SNew(STextBlock)
                         .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-                        .Text(LOCTEXT("MonitoringTitle", "Status Monitoring"))
+                        .Text(LOCTEXT("MonitoringSettingsTitle", "Monitoring"))
                 ]
 
-                // ø©±‚ø° ∏¥œ≈Õ∏µ UI √ﬂ∞°
-                // («ˆ¿Á ø™«“, ø¨∞· ªÛ≈¬, «ˆ¿Á ≈∏¿”ƒ⁄µÂ µÓ)
+                // Add monitoring UI here (connection status, current timecode, etc.)
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SBox)
+                ]
         ];
 }
 
 void STimecodeSyncEditorUI::UpdateUI()
 {
-    // UI æ˜µ•¿Ã∆Æ
+    // UI ÏóÖÎç∞Ïù¥Ìä∏
 }
 
 void STimecodeSyncEditorUI::OnRoleModeChanged(ETimecodeRoleMode NewMode)
@@ -369,7 +358,7 @@ void STimecodeSyncEditorUI::OnRoleModeChanged(ETimecodeRoleMode NewMode)
         Settings->RoleMode = NewMode;
         SaveSettings();
 
-        // UI æ˜µ•¿Ã∆Æ
+        // UI ÏóÖÎç∞Ïù¥Ìä∏
         UpdateUI();
     }
 }
@@ -382,7 +371,7 @@ void STimecodeSyncEditorUI::OnManualMasterChanged(bool bNewValue)
         Settings->bIsManualMaster = bNewValue;
         SaveSettings();
 
-        // UI æ˜µ•¿Ã∆Æ
+        // UI ÏóÖÎç∞Ïù¥Ìä∏
         UpdateUI();
     }
 }
@@ -397,7 +386,7 @@ void STimecodeSyncEditorUI::OnMasterIPAddressChanged(const FText& NewText, EText
             Settings->MasterIPAddress = NewText.ToString();
             SaveSettings();
 
-            // UI æ˜µ•¿Ã∆Æ
+            // UI ÏóÖÎç∞Ïù¥Ìä∏
             UpdateUI();
         }
     }

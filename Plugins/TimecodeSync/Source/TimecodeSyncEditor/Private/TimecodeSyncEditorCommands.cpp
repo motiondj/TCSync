@@ -1,4 +1,4 @@
-#include "TimecodeSyncEditorCommands.h"
+﻿#include "TimecodeSyncEditorCommands.h"
 
 #define LOCTEXT_NAMESPACE "FTimecodeSyncEditorCommands"
 

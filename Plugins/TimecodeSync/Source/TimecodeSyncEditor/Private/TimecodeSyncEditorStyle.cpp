@@ -1,4 +1,4 @@
-#include "TimecodeSyncEditorStyle.h"
+癤�#include "TimecodeSyncEditorStyle.h"
 #include "Styling/SlateStyleRegistry.h"
 #include "Styling/SlateTypes.h"
 #include "Styling/CoreStyle.h"
@@ -38,10 +38,10 @@ TSharedRef<FSlateStyleSet> FTimecodeSyncEditorStyle::Create()
 {
     TSharedRef<FSlateStyleSet> StyleRef = MakeShareable(new FSlateStyleSet(GetStyleSetName()));
 
-    // 스타일 경로 설정
+    // Set style path
     StyleRef->SetContentRoot(IPluginManager::Get().FindPlugin(TEXT("TimecodeSync"))->GetBaseDir() / TEXT("Resources"));
 
-    // 이미지 브러시 추가
+    // Add image brush
     StyleRef->Set("TimecodeSyncEditor.OpenTimecodeSyncUI", new IMAGE_BRUSH(TEXT("ButtonIcon_40x"), FVector2D(40.0f, 40.0f)));
 
     return StyleRef;

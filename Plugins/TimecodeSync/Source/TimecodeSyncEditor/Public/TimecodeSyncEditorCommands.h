@@ -1,4 +1,4 @@
-#pragma once
+癤�#pragma once
 
 #include "CoreMinimal.h"
 #include "Framework/Commands/Commands.h"
@@ -8,15 +8,15 @@ class FTimecodeSyncEditorCommands : public TCommands<FTimecodeSyncEditorCommands
 public:
     FTimecodeSyncEditorCommands();
 
-    // TCommands 인터페이스
+    // TCommands interface
     virtual void RegisterCommands() override;
 
-    // UI 명령어
+    // UI commands
     TSharedPtr<FUICommandInfo> OpenTimecodeSyncUI;
 
-    // 명령어 리스트
+    // Command list
     TSharedPtr<FUICommandList> CommandList;
 
-    // 싱글톤 인스턴스 접근자
+    // Singleton instance accessor
     static const FTimecodeSyncEditorCommands& Get();
 };

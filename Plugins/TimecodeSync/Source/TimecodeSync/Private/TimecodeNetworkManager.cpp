@@ -9,7 +9,7 @@
 #include "HAL/RunnableThread.h"
 #include "Serialization/ArrayReader.h"
 
-// 로그 카테고리 정의
+// Define log category
 DEFINE_LOG_CATEGORY_STATIC(LogTimecodeNetwork, Log, All);
 
 UTimecodeNetworkManager::UTimecodeNetworkManager()
@@ -26,7 +26,7 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , MasterIPAddress(TEXT(""))
     , bRoleAutomaticallyDetermined(true)
 {
-    // 기본 초기화 완료
+    // Basic initialization complete
     UE_LOG(LogTimecodeNetwork, Verbose, TEXT("TimecodeNetworkManager created with ID: %s"), *InstanceID);
 }
 
@@ -38,21 +38,21 @@ UTimecodeNetworkManager::~UTimecodeNetworkManager()
 
 bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 {
-    // 이미 초기화된 경우 종료
+    // Shutdown if already initialized
     if (Socket != nullptr || Receiver != nullptr)
     {
         UE_LOG(LogTimecodeNetwork, Warning, TEXT("TimecodeNetworkManager already initialized, shutting down first"));
         Shutdown();
     }
 
-    // 역할 결정
+    // Determine role
     if (RoleMode == ETimecodeRoleMode::Automatic)
     {
         bIsMasterMode = AutoDetectRole();
         bRoleAutomaticallyDetermined = true;
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Automatic role detection: %s"), bIsMasterMode ? TEXT("MASTER") : TEXT("SLAVE"));
     }
-    else // Manual 모드
+    else // Manual mode
     {
         bIsMasterMode = bIsManuallyMaster;
         bRoleAutomaticallyDetermined = false;
@@ -61,20 +61,20 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 
     PortNumber = Port;
 
-    // 소켓 생성
+    // Create socket
     if (!CreateSocket())
     {
         UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to create UDP socket"));
         return false;
     }
 
-    // UDP 수신 설정
+    // Setup UDP reception
     FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(100);
     Receiver = new FUdpSocketReceiver(Socket, ThreadWaitTime, TEXT("TimecodeReceiver"));
     Receiver->OnDataReceived().BindUObject(this, &UTimecodeNetworkManager::OnUDPReceived);
     Receiver->Start();
 
-    // 연결 상태 설정
+    // Set connection state
     SetConnectionState(ENetworkConnectionState::Connected);
 
     UE_LOG(LogTimecodeNetwork, Log, TEXT("Network manager initialized in %s mode"), bIsMasterMode ? TEXT("Master") : TEXT("Slave"));
@@ -83,7 +83,7 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 
 void UTimecodeNetworkManager::Shutdown()
 {
-    // 수신 중지
+    // Stop reception
     if (Receiver != nullptr)
     {
         Receiver->Stop();
@@ -92,10 +92,10 @@ void UTimecodeNetworkManager::Shutdown()
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("UDP receiver stopped"));
     }
 
-    // 소켓 정리
+    // Clean up socket
     if (Socket != nullptr)
     {
-        // 멀티캐스트 그룹 탈퇴
+        // Leave multicast group
         if (!MulticastGroupAddress.IsEmpty())
         {
             TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
@@ -115,7 +115,7 @@ void UTimecodeNetworkManager::Shutdown()
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Socket closed and destroyed"));
     }
 
-    // 연결 상태 설정
+    // Set connection state
     SetConnectionState(ENetworkConnectionState::Disconnected);
 
     UE_LOG(LogTimecodeNetwork, Log, TEXT("Network manager shutdown"));
@@ -129,21 +129,21 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
         return false;
     }
 
-    // 메시지 직렬화
+    // Serialize message
     FTimecodeNetworkMessage Message;
     Message.MessageType = MessageType;
     Message.Timecode = Timecode;
     Message.Timestamp = FPlatformTime::Seconds();
     Message.SenderID = InstanceID;
-    Message.Data = TEXT(""); // 기본 데이터는 빈 문자열
+    Message.Data = TEXT(""); // Default data is empty string
 
-    // 메시지 직렬화
+    // Serialize message
     TArray<uint8> MessageData = Message.Serialize();
 
-    // 메시지 전송
+    // Send message
     int32 BytesSent = 0;
 
-    // 수동 모드에서 슬레이브일 때 마스터 IP가 설정되어 있으면 해당 IP로 직접 전송
+    // Send directly to master IP if in manual mode and slave
     if (RoleMode == ETimecodeRoleMode::Manual && !bIsMasterMode && !MasterIPAddress.IsEmpty())
     {
         TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
@@ -162,7 +162,7 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message directly to Master: %s"),
             *UEnum::GetValueAsString(MessageType), *MasterIPAddress);
     }
-    // 타겟 IP가 설정된 경우 유니캐스트 사용
+    // Use unicast if target IP is set
     else if (!TargetIPAddress.IsEmpty())
     {
         TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
@@ -181,7 +181,7 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to target: %s"),
             *UEnum::GetValueAsString(MessageType), *TargetIPAddress);
     }
-    // 멀티캐스트 그룹이 설정된 경우 멀티캐스트 사용
+    // Use multicast if multicast group is set
     else if (!MulticastGroupAddress.IsEmpty())
     {
         TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
@@ -217,7 +217,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
         return false;
     }
 
-    // 메시지 직렬화
+    // Serialize message
     FTimecodeNetworkMessage Message;
     Message.MessageType = ETimecodeMessageType::Event;
     Message.Timecode = Timecode;
@@ -225,16 +225,16 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
     Message.Timestamp = FPlatformTime::Seconds();
     Message.SenderID = InstanceID;
 
-    // 메시지 직렬화
+    // Serialize message
     TArray<uint8> MessageData = Message.Serialize();
 
-    // 메시지 전송 (멀티캐스트 그룹 또는 단일 대상 IP 선택)
+    // Send message (choose between multicast group or single target IP)
     int32 BytesSent = 0;
 
-    // 전송 우선순위: 멀티캐스트 > 타겟IP > 마스터IP
+    // Transmission priority: Multicast > TargetIP > MasterIP
     if (!MulticastGroupAddress.IsEmpty())
     {
-        // 멀티캐스트 그룹 전송
+        // Send to multicast group
         TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
@@ -252,7 +252,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
     }
     else if (!TargetIPAddress.IsEmpty())
     {
-        // 단일 대상 IP 전송
+        // Send to single target IP
         TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         TargetAddr->SetIp(*TargetIPAddress, bIsValid);
@@ -270,7 +270,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
     }
     else if (RoleMode == ETimecodeRoleMode::Manual && !bIsMasterMode && !MasterIPAddress.IsEmpty())
     {
-        // 수동 슬레이브 모드에서 마스터 IP로 전송
+        // Send to master IP in manual slave mode
         TSharedRef<FInternetAddr> MasterAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
         bool bIsValid = false;
         MasterAddr->SetIp(*MasterIPAddress, bIsValid);
@@ -315,23 +315,23 @@ void UTimecodeNetworkManager::SetRoleMode(ETimecodeRoleMode NewMode)
             (OldMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"),
             (RoleMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"));
 
-        // 역할 재결정
+        // Determine role again
         bool bOldMasterMode = bIsMasterMode;
 
         if (RoleMode == ETimecodeRoleMode::Automatic)
         {
-            // 자동 모드에서는 IP 기반 또는 기타 자동 감지 로직 사용
+            // Use IP-based or other automatic detection logic in automatic mode
             bIsMasterMode = AutoDetectRole();
             bRoleAutomaticallyDetermined = true;
         }
         else
         {
-            // 수동 모드에서는 사용자 설정 사용
+            // Use manual setting in manual mode
             bIsMasterMode = bIsManuallyMaster;
             bRoleAutomaticallyDetermined = false;
         }
 
-        // 역할이 변경되었고 이미 초기화된 경우 재초기화
+        // Role changed and already initialized
         if (bOldMasterMode != bIsMasterMode && Socket != nullptr)
         {
             UE_LOG(LogTimecodeNetwork, Log, TEXT("Role changed, reinitializing network..."));
@@ -340,7 +340,7 @@ void UTimecodeNetworkManager::SetRoleMode(ETimecodeRoleMode NewMode)
             Initialize(bIsMasterMode, OldPort);
         }
 
-        // 이벤트 발생
+        // Event triggered
         OnRoleModeChanged.Broadcast(RoleMode);
     }
 }
@@ -359,13 +359,13 @@ void UTimecodeNetworkManager::SetManualMaster(bool bInIsManuallyMaster)
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Manual master setting changed to: %s"),
             bIsManuallyMaster ? TEXT("MASTER") : TEXT("SLAVE"));
 
-        // 수동 모드인 경우에만 역할 변경 적용
+        // Apply role change only if in manual mode
         if (RoleMode == ETimecodeRoleMode::Manual)
         {
             bool bOldMasterMode = bIsMasterMode;
             bIsMasterMode = bIsManuallyMaster;
 
-            // 역할이 변경되었고 이미 초기화된 경우 재초기화
+            // Role changed and already initialized
             if (bOldMasterMode != bIsMasterMode && Socket != nullptr)
             {
                 UE_LOG(LogTimecodeNetwork, Log, TEXT("Master role changed, reinitializing network..."));
@@ -390,7 +390,7 @@ void UTimecodeNetworkManager::SetMasterIPAddress(const FString& InMasterIP)
 
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Master IP address changed to: %s"), *MasterIPAddress);
 
-        // 수동 슬레이브 모드에서 타겟 IP 설정
+        // Set target IP if in manual slave mode
         if (RoleMode == ETimecodeRoleMode::Manual && !bIsManuallyMaster)
         {
             SetTargetIP(MasterIPAddress);
@@ -448,7 +448,7 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // UDP 소켓 생성
+    // Create UDP socket
     Socket = SocketSubsystem->CreateSocket(NAME_DGram, TEXT("TimecodeSocket"), true);
     if (Socket == nullptr)
     {
@@ -456,15 +456,15 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // 소켓 설정
+    // Set socket options
     Socket->SetReuseAddr();
     Socket->SetRecvErr();
     Socket->SetNonBlocking();
 
-    // 브로드캐스트 설정
+    // Set broadcast
     Socket->SetBroadcast();
 
-    // 로컬 주소 설정
+    // Set local address
     TSharedRef<FInternetAddr> LocalAddr = SocketSubsystem->CreateInternetAddr();
     LocalAddr->SetAnyAddress();
     LocalAddr->SetPort(PortNumber);
@@ -488,20 +488,20 @@ void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& DataPtr, cons
         return;
     }
 
-    // 데이터를 TArray<uint8>로 변환
+    // Convert data to TArray<uint8>
     TArray<uint8> ReceivedData;
     ReceivedData.Append(DataPtr->GetData(), DataPtr->Num());
 
-    // 메시지 역직렬화
+    // Deserialize message
     FTimecodeNetworkMessage Message;
     if (Message.Deserialize(ReceivedData))
     {
-        // 수신된 메시지의 발신자가 자신이 아닌 경우에만 처리
+        // Process message only if sender is not self
         if (Message.SenderID != InstanceID)
         {
-            // 메시지 처리
+            // Process message
             ProcessMessage(Message);
-            // 메시지 수신 알림
+            // Message received notification
             OnMessageReceived.Broadcast(Message);
         }
     }
@@ -513,26 +513,26 @@ void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& DataPtr, cons
 
 void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Message)
 {
-    // 메시지 타입 문자열 변환
+    // Convert message type to string
     FString MessageTypeStr = UEnum::GetValueAsString(Message.MessageType);
 
     switch (Message.MessageType)
     {
     case ETimecodeMessageType::Heartbeat:
-        // 하트비트 처리
+        // Process heartbeat
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Received heartbeat (%s) from %s"), *MessageTypeStr, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::TimecodeSync:
-        // 타임코드 동기화 처리
+        // Process timecode synchronization
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Received timecode (%s): %s from %s"), *MessageTypeStr, *Message.Timecode, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::RoleAssignment:
-        // 역할 할당 처리
+        // Process role assignment
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Received role assignment (%s): %s from %s"), *MessageTypeStr, *Message.Data, *Message.SenderID);
 
-        // 자동 모드에서만 외부 할당 처리
+        // Process external assignment only in automatic mode
         if (RoleMode == ETimecodeRoleMode::Automatic)
         {
             if (Message.Data.Equals(TEXT("MASTER"), ESearchCase::IgnoreCase))
@@ -571,12 +571,12 @@ void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Mess
         break;
 
     case ETimecodeMessageType::Event:
-        // 이벤트 처리
+        // Process event
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Received event (%s): %s at %s from %s"), *MessageTypeStr, *Message.Data, *Message.Timecode, *Message.SenderID);
         break;
 
     case ETimecodeMessageType::Command:
-        // 명령 처리
+        // Process command
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Received command (%s): %s from %s"), *MessageTypeStr, *Message.Data, *Message.SenderID);
         break;
 
@@ -610,33 +610,33 @@ void UTimecodeNetworkManager::SendHeartbeat()
 
 bool UTimecodeNetworkManager::AutoDetectRole()
 {
-    // 로컬 IP 주소 가져오기
+    // Get local IP address
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     bool bCanBindAll = false;
     TSharedPtr<FInternetAddr> LocalAddr = SocketSubsystem->GetLocalHostAddr(*GLog, bCanBindAll);
 
     if (LocalAddr.IsValid() && bCanBindAll)
     {
-        // IP 주소 출력
+        // Print IP address
         FString LocalIP = LocalAddr->ToString(false);
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Local IP: %s"), *LocalIP);
 
-        // nDisplay 통합 코드를 여기에 추가할 수 있음
+        // nDisplay integration code can be added here
 
-        // IP 기반 간단한 결정 로직
-        // 실제 구현에서는 UDP 브로드캐스트로 다른 노드를 검색하고
-        // IP를 비교하거나 기타 방법으로 마스터를 결정해야 함
+        // IP-based simple decision logic
+        // In actual implementation, you should search for other nodes using UDP broadcast
+        // and compare IPs or use other methods to determine the master
 
-        // 디스커버리 메시지 브로드캐스트하여 다른 노드 검색
-        // 응답을 기다리고 IP 비교하는 로직 구현
+        // Discover message broadcast to search for other nodes
+        // Implement logic to wait for response and compare IPs
 
-        // 임시 구현: 첫 번째 노드가 마스터가 됨 (더 복잡한 검색 로직으로 대체 필요)
+        // Temporary implementation: First node becomes master (more complex search logic needed)
         bool bHasLowerIP = false;
 
-        // 여기서 검색 로직 구현
+        // Implement search logic here
         // ...
 
-        // 더 낮은 IP를 가진 노드가 없으면 마스터가 됨
+        // Master if no node with lower IP
         bool bIsMaster = !bHasLowerIP;
 
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Auto-detected role: %s"), bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
@@ -644,7 +644,7 @@ bool UTimecodeNetworkManager::AutoDetectRole()
         return bIsMaster;
     }
 
-    // IP를 가져올 수 없는 경우 기본적으로 슬레이브로 설정
+    // Default to SLAVE if IP cannot be obtained
     UE_LOG(LogTimecodeNetwork, Warning, TEXT("Could not determine local IP address, defaulting to SLAVE"));
     return false;
 }

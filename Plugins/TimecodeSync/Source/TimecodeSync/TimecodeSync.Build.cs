@@ -13,8 +13,8 @@ public class TimecodeSync : ModuleRules
                 "CoreUObject",
                 "Engine",
                 "InputCore",
-                "Networking",   // 네트워킹 모듈 추가
-                "Sockets"       // 소켓 모듈 추가
+                "Networking",   // Add networking module
+                "Sockets"       // Add socket module
             }
         );
 
@@ -28,7 +28,7 @@ public class TimecodeSync : ModuleRules
             }
         );
 
-        // 테스트 관련 의존성 추가
+        // Add test-related dependencies
         if (Target.bBuildDeveloperTools || Target.Configuration != UnrealTargetConfiguration.Shipping)
         {
             PrivateDependencyModuleNames.AddRange(
@@ -39,7 +39,7 @@ public class TimecodeSync : ModuleRules
             );
         }
 
-        // Tests 폴더를 포함 경로에 추가
+        // Add Tests folder to include paths
         PrivateIncludePaths.AddRange(
             new string[]
             {

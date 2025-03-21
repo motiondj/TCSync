@@ -6,15 +6,15 @@
 
 void FTimecodeSyncModule::StartupModule()
 {
-    // 모듈 초기화 코드
+    // Module initialization code
     UE_LOG(LogTemp, Log, TEXT("TimecodeSync Module Started"));
 
-    // 설정 로드
+    // Load settings
     LoadSettings();
 
     UE_LOG(LogTemp, Warning, TEXT("TimecodeSync module started, checking for tests..."));
 
-    // 테스트 검증을 위한 임시 코드
+    // Temporary code for test validation
     TArray<FAutomationTestInfo> TestInfos;
     FAutomationTestFramework::Get().GetValidTestNames(TestInfos);
     for (const FAutomationTestInfo& TestInfo : TestInfos)
@@ -28,13 +28,13 @@ void FTimecodeSyncModule::StartupModule()
 
 void FTimecodeSyncModule::ShutdownModule()
 {
-    // 모듈 종료 코드
+    // Module shutdown code
     UE_LOG(LogTemp, Log, TEXT("TimecodeSync Module Shutdown"));
 }
 
 void FTimecodeSyncModule::LoadSettings()
 {
-    // 설정 로드 및 적용
+    // Load and apply settings
     const UTimecodeSettings* Settings = GetDefault<UTimecodeSettings>();
     if (Settings)
     {
