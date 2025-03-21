@@ -18,7 +18,7 @@ FName UTimecodeSettings::GetCategoryName() const
     return FName("Plugins");
 }
 
-FText UTimecodeSettings::GetSectionText() const
+FText UTimecodeSettings::GetSectionDescription() const
 {
     return FText::FromString("Timecode Sync");
 }

@@ -58,5 +58,5 @@ public:
 public:
     // UDeveloperSettings 인터페이스
     virtual FName GetCategoryName() const override;
-    virtual FText GetSectionText() const override;
+    virtual FText GetSectionDescription() const;
 };
