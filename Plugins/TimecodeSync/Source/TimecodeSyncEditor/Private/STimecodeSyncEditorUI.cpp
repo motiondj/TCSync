@@ -1,6 +1,6 @@
 ﻿#include "STimecodeSyncEditorUI.h"
 #include "TimecodeSettings.h"
-#include "EditorStyleSet.h"
+#include "Styling/AppStyle.h"
 #include "IDetailsView.h"
 #include "PropertyEditorModule.h"
 #include "Modules/ModuleManager.h"
@@ -21,7 +21,7 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
     ChildSlot
         [
             SNew(SBorder)
-                .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+                .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
                 .Padding(4.0f)
                 [
                     SNew(SScrollBox)
@@ -97,13 +97,15 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
 {
-    // ComboBox options for role mode selection
-    TArray<TSharedPtr<FText>> RoleModeOptions;
-    RoleModeOptions.Add(MakeShareable(new FText(LOCTEXT("AutomaticMode", "Automatic Detection"))));
-    RoleModeOptions.Add(MakeShareable(new FText(LOCTEXT("ManualMode", "Manual Setting"))));
+    // Initialize role mode options if not already done
+    if (RoleModeOptions.Num() == 0)
+    {
+        RoleModeOptions.Add(MakeShareable(new FText(LOCTEXT("AutomaticMode", "Automatic Detection"))));
+        RoleModeOptions.Add(MakeShareable(new FText(LOCTEXT("ManualMode", "Manual Setting"))));
+    }
 
     return SNew(SBorder)
-        .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+        .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
@@ -149,12 +151,12 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                                             UTimecodeSettings* Settings = GetTimecodeSettings();
                                             if (Settings)
                                             {
-                                                int32 Index = RoleModeOptions.IndexOfByPredicate([NewValue](const TSharedPtr<FText>& Option)
+                                                const int32 Index = RoleModeOptions.IndexOfByPredicate([NewValue](const TSharedPtr<FText>& Option)
                                                     {
                                                         return Option->EqualTo(*NewValue);
                                                     });
 
-                                                ETimecodeRoleMode NewMode = Index == 1 ?
+                                                const ETimecodeRoleMode NewMode = (Index == 1) ?
                                                     ETimecodeRoleMode::Manual : ETimecodeRoleMode::Automatic;
 
                                                 OnRoleModeChanged(NewMode);
@@ -176,7 +178,6 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
-                .Expose()
                 [
                     SNew(SBox)
                         .Visibility(this, &STimecodeSyncEditorUI::GetManualRoleSettingsVisibility)
@@ -262,7 +263,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
 {
     // Simple network settings section implementation
     return SNew(SBorder)
-        .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+        .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
@@ -291,7 +292,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateTimecodeSettingsSection()
 {
     // Simple timecode settings section implementation
     return SNew(SBorder)
-        .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+        .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
@@ -320,7 +321,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
 {
     // Simple monitoring section implementation
     return SNew(SBorder)
-        .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+        .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
         .Padding(4.0f)
         [
             SNew(SVerticalBox)
@@ -376,7 +377,7 @@ void STimecodeSyncEditorUI::OnManualMasterChanged(bool bNewValue)
     }
 }
 
-void STimecodeSyncEditorUI::OnMasterIPAddressChanged(const FText& NewText, ETextCommit::Type CommitType)
+void STimecodeSyncEditorUI::OnMasterIPCommitted(const FText& NewText, ETextCommit::Type CommitType)
 {
     if (CommitType == ETextCommit::OnEnter || CommitType == ETextCommit::OnUserMovedFocus)
     {
@@ -385,9 +386,6 @@ void STimecodeSyncEditorUI::OnMasterIPAddressChanged(const FText& NewText, EText
         {
             Settings->MasterIPAddress = NewText.ToString();
             SaveSettings();
-
-            // UI 업데이트
-            UpdateUI();
         }
     }
 }
@@ -450,6 +448,16 @@ EVisibility STimecodeSyncEditorUI::GetManualSlaveSettingsVisibility() const
     }
 
     return EVisibility::Collapsed;
+}
+
+FText STimecodeSyncEditorUI::GetMasterIPText() const
+{
+    UTimecodeSettings* Settings = GetTimecodeSettings();
+    if (Settings)
+    {
+        return FText::FromString(Settings->MasterIPAddress);
+    }
+    return FText::GetEmpty();
 }
 
 #undef LOCTEXT_NAMESPACE

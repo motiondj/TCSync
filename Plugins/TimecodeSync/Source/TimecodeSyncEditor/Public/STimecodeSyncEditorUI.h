@@ -4,6 +4,7 @@
 #include "Widgets/SCompoundWidget.h"
 #include "TimecodeSettings.h"
 #include "TimecodeNetworkTypes.h"
+#include "HAL/PlatformTLS.h"
 
 /**
  * Editor UI for timecode synchronization settings
@@ -39,6 +40,7 @@ private:
     void OnRoleModeChanged(ETimecodeRoleMode NewMode);
     void OnManualMasterChanged(bool bNewValue);
     void OnMasterIPAddressChanged(const FText& NewText, ETextCommit::Type CommitType);
+    void OnMasterIPCommitted(const FText& NewText, ETextCommit::Type CommitType);
 
     // Settings related functions
     UTimecodeSettings* GetTimecodeSettings() const;
@@ -47,11 +49,12 @@ private:
     // Get role mode text
     FText GetRoleModeText() const;
     FText GetManualRoleText() const;
+    FText GetMasterIPText() const;
 
     // Visibility for automatic/manual detail sections
     EVisibility GetManualRoleSettingsVisibility() const;
     EVisibility GetManualSlaveSettingsVisibility() const;
 
     // Timer handle
-    FDelegateHandle TickDelegateHandle;
+    FTSTicker::FDelegateHandle TickDelegateHandle;
 };

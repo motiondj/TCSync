@@ -9,7 +9,7 @@
 #include "LevelEditor.h"
 #include "ToolMenus.h"
 #include "ToolMenuEntry.h"
-#include "EditorStyleSet.h"
+#include "EditorStyle.h"
 
 #define LOCTEXT_NAMESPACE "FTimecodeSyncEditorModule"
 
@@ -17,6 +17,9 @@ const FName FTimecodeSyncEditorModule::TimecodeSyncTabId = TEXT("TimecodeSyncTab
 
 void FTimecodeSyncEditorModule::StartupModule()
 {
+    // 플러그인 로드 확인을 위한 로그 추가
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module attempting to start up"));
+
     // Register styles and commands
     FTimecodeSyncEditorStyle::Initialize();
     FTimecodeSyncEditorCommands::Register();
@@ -35,10 +38,14 @@ void FTimecodeSyncEditorModule::StartupModule()
         FOnSpawnTab::CreateRaw(this, &FTimecodeSyncEditorModule::SpawnTimecodeSyncTab))
         .SetDisplayName(LOCTEXT("TimecodeSyncTabTitle", "Timecode Sync"))
         .SetMenuType(ETabSpawnerMenuType::Hidden);
+
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module started up successfully"));
 }
 
 void FTimecodeSyncEditorModule::ShutdownModule()
 {
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module shutting down"));
+
     // Unregister menus
     UToolMenus::UnRegisterStartupCallback(this);
     UToolMenus::UnregisterOwner(this);
@@ -51,6 +58,8 @@ void FTimecodeSyncEditorModule::ShutdownModule()
 
     // Unregister tab spawner
     FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TimecodeSyncTabId);
+
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module shut down successfully"));
 }
 
 TSharedRef<SDockTab> FTimecodeSyncEditorModule::SpawnTimecodeSyncTab(const FSpawnTabArgs& SpawnTabArgs)
@@ -64,43 +73,64 @@ TSharedRef<SDockTab> FTimecodeSyncEditorModule::SpawnTimecodeSyncTab(const FSpaw
 
 void FTimecodeSyncEditorModule::RegisterMenus()
 {
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor: Starting menu registration"));
+
     // Register tool menu owner
     FToolMenuOwnerScoped OwnerScoped(this);
 
     // Extend main menu
     UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.MainMenu.Window");
-    FToolMenuSection& Section = Menu->FindOrAddSection("WindowLayout");
+    if (Menu)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor: Successfully extended Window menu"));
+        FToolMenuSection& Section = Menu->FindOrAddSection("WindowLayout");
 
-    // Add menu items
-    Section.AddMenuEntryWithCommandList(
-        FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
-        FTimecodeSyncEditorCommands::Get().CommandList);
+        // Add menu items
+        Section.AddMenuEntryWithCommandList(
+            FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
+            FTimecodeSyncEditorCommands::Get().CommandList);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("TimecodeSyncEditor: Failed to extend Window menu"));
+    }
 
     // Extend toolbar
     UToolMenu* ToolbarMenu = UToolMenus::Get()->ExtendMenu("LevelEditor.LevelEditorToolBar.PlayToolBar");
-    FToolMenuSection& ToolbarSection = ToolbarMenu->FindOrAddSection("PluginTools");
+    if (ToolbarMenu)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor: Successfully extended toolbar"));
+        FToolMenuSection& ToolbarSection = ToolbarMenu->FindOrAddSection("PluginTools");
 
-    // Add toolbar button
-    FToolMenuEntry& Entry = ToolbarSection.AddEntry(
-        FToolMenuEntry::InitToolBarButton(
-            FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
-            LOCTEXT("TimecodeSyncToolbarButton", "Timecode"),
-            LOCTEXT("TimecodeSyncToolbarTooltip", "Opens the Timecode Sync panel"),
-            FSlateIcon(FTimecodeSyncEditorStyle::GetStyleSetName(), "TimecodeSyncEditor.OpenTimecodeSyncUI")
-        )
-    );
+        // Add toolbar button
+        FToolMenuEntry& Entry = ToolbarSection.AddEntry(
+            FToolMenuEntry::InitToolBarButton(
+                FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
+                LOCTEXT("TimecodeSyncToolbarButton", "Timecode"),
+                LOCTEXT("TimecodeSyncToolbarTooltip", "Opens the Timecode Sync panel"),
+                FSlateIcon(FTimecodeSyncEditorStyle::GetStyleSetName(), "TimecodeSyncEditor.OpenTimecodeSyncUI.Small")
+            )
+        );
 
-    Entry.SetCommandList(FTimecodeSyncEditorCommands::Get().CommandList);
+        Entry.SetCommandList(FTimecodeSyncEditorCommands::Get().CommandList);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("TimecodeSyncEditor: Failed to extend toolbar"));
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor: Completed menu registration"));
 }
 
 void FTimecodeSyncEditorModule::RegisterCommands()
 {
     // Create command list
-    FTimecodeSyncEditorCommands::Get().CommandList = MakeShareable(new FUICommandList);
+    auto& Commands = FTimecodeSyncEditorCommands::Get();
+    Commands.CommandList = MakeShareable(new FUICommandList());
 
     // Bind commands
-    FTimecodeSyncEditorCommands::Get().CommandList->MapAction(
-        FTimecodeSyncEditorCommands::Get().OpenTimecodeSyncUI,
+    Commands.CommandList->MapAction(
+        Commands.OpenTimecodeSyncUI,
         FExecuteAction::CreateRaw(this, &FTimecodeSyncEditorModule::OpenTimecodeSyncTab),
         FCanExecuteAction());
 }

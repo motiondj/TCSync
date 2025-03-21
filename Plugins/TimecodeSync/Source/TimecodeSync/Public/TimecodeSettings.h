@@ -85,7 +85,7 @@ public:
 public:
     // UDeveloperSettings interface
     virtual FName GetCategoryName() const override;
-    virtual FText GetSectionText() const override;
+    virtual FText GetSectionText() const;
     virtual FText GetSectionDescription() const override;
 
 #if WITH_EDITOR

@@ -14,7 +14,9 @@ public class TimecodeSyncEditor : ModuleRules
                 "Engine",
                 "InputCore",
                 "Slate",
-                "SlateCore"
+                "SlateCore",
+                "EditorStyle",
+                "AppFramework"
             }
         );
 
@@ -27,7 +29,8 @@ public class TimecodeSyncEditor : ModuleRules
                 "ToolMenus",
                 "PropertyEditor",
                 "LevelEditor",
-                "TimecodeSync"
+                "TimecodeSync",
+                "WorkspaceMenuStructure"
             }
         );
     }

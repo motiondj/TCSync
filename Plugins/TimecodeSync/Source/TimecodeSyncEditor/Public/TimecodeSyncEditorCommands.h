@@ -15,7 +15,7 @@ public:
     TSharedPtr<FUICommandInfo> OpenTimecodeSyncUI;
 
     // Command list
-    TSharedPtr<FUICommandList> CommandList;
+    mutable TSharedPtr<FUICommandList> CommandList;
 
     // Singleton instance accessor
     static const FTimecodeSyncEditorCommands& Get();
