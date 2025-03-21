@@ -23,10 +23,10 @@
   - ✅ 기본 정보 (버전, 설명 등) 설정
   - ✅ 런타임 및 에디터 모듈 정의
 
-- ⚠️ 빌드 스크립트 구성
+- ✅ 빌드 스크립트 구성
   - ✅ TimecodeSync.Build.cs 파일 수정
   - ✅ 필요한 모듈 종속성 추가 (네트워킹, 소켓 등)
-  - ❌ TimecodeSyncEditor.Build.cs 파일 생성 및 구성
+  - ✅ TimecodeSyncEditor.Build.cs 파일 생성 및 구성
 
 ### 테스트 항목
 - ✅ 플러그인 로드 테스트
