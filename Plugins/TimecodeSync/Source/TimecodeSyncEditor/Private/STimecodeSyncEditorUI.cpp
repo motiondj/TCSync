@@ -80,41 +80,54 @@ STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
     ShutdownTimecodeManager();
 }
 
+// STimecodeSyncEditorUI.cpp
 void STimecodeSyncEditorUI::ShutdownTimecodeManager()
 {
-    // 1. 지역 변수에 현재 상태 저장 (포인터 체크를 한 번만 수행)
-    bool bHasValidDelegateHandler = DelegateHandler.IsValid();
-    bool bHasValidManager = TimecodeManager.IsValid();
+    // 1. 지역 변수에 현재 상태 저장 (중요: 체크한 후에 다시 체크하지 않음)
+    UTimecodeNetworkManager* TempManager = nullptr;
+    UTimecodeSyncEditorDelegateHandler* TempHandler = nullptr;
+
+    if (TimecodeManager.IsValid())
+    {
+        TempManager = TimecodeManager.Get();
+    }
+
+    if (DelegateHandler.IsValid())
+    {
+        TempHandler = DelegateHandler.Get();
+    }
 
     // 2. 먼저 델리게이트 바인딩 제거
-    if (bHasValidDelegateHandler)
+    if (TempHandler)
     {
-        DelegateHandler->OnTimecodeMessageReceived.Unbind();
-        DelegateHandler->OnNetworkStateChanged.Unbind();
+        TempHandler->OnTimecodeMessageReceived.Unbind();
+        TempHandler->OnNetworkStateChanged.Unbind();
     }
 
     // 3. 타임코드 매니저의 델리게이트 등록 해제
-    if (bHasValidManager && bHasValidDelegateHandler)
+    if (TempManager && TempHandler)
     {
-        TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler.Get());
-        TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler.Get());
+        TempManager->OnTimecodeMessageReceived.RemoveAll(TempHandler);
+        TempManager->OnNetworkStateChanged.RemoveAll(TempHandler);
     }
 
     // 4. 타임코드 매니저 종료 호출
-    if (bHasValidManager)
+    if (TempManager)
     {
-        TimecodeManager->Shutdown();
+        TempManager->Shutdown();
     }
 
-    // 5. 스마트 포인터 정리 - 순서 변경 (TimecodeManager를 먼저 Reset)
-    if (bHasValidManager)
+    // 5. 스마트 포인터 정리 - 매우 중요한 순서
+    // UObject를 가리키는 포인터(TimecodeManager)를 먼저 해제
+    if (TimecodeManager.IsValid())
     {
-        TimecodeManager.Reset(); // UObject를 먼저 해제
+        TimecodeManager.Reset();
     }
 
-    if (bHasValidDelegateHandler)
+    // 그 다음 델리게이트 핸들러 해제
+    if (DelegateHandler.IsValid())
     {
-        DelegateHandler.Reset(); // 그 다음 델리게이트 핸들러 해제
+        DelegateHandler.Reset();
     }
 }
 
