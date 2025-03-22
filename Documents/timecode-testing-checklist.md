@@ -16,13 +16,13 @@
 ## 2. 타임코드 유틸리티 테스트
 
 ### 자동화 테스트 실행
-- [ ] Session Frontend 열기 (Window → Developer Tools → Session Frontend)
-- [ ] Automation 탭 선택
-- [ ] "TimecodeSync" 검색
-- [ ] TimecodeSync.Utils.Conversion 테스트 실행
-  - [ ] 결과: PASSED / FAILED
-- [ ] TimecodeSync.Utils.DropFrame 테스트 실행
-  - [ ] 결과: PASSED / FAILED
+- ✅ Session Frontend 열기 (Window → Developer Tools → Session Frontend)
+- ✅ Automation 탭 선택
+- ✅ "TimecodeSync" 검색
+- ✅ TimecodeSync.Utils.Conversion 테스트 실행
+  - ✅ 결과: PASSED / FAILED
+- ✅ TimecodeSync.Utils.DropFrame 테스트 실행
+  - ✅ 결과: PASSED / FAILED
 
 ## 3. 통합 테스트 실행
 
