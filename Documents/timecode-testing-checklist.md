@@ -34,12 +34,12 @@
 - [x] Play 버튼 클릭하여 테스트 실행
 - [x] 테스트 결과 관찰:
   - [x] UDP Connection: PASSED
-  - [x] Message Serialization: FAILED
+  - [x] Message Serialization: PASSED
   - [x] Packet Loss Handling: FAILED
   - [x] Master/Slave Sync: FAILED
   - [x] Multiple Frame Rates: FAILED
   - [x] System Time Sync: FAILED
-  - [x] Auto Role Detection: FAILED
+  - [x] Auto Role Detection: PASSED
 - [x] 최종 통과율: 14.3% (1/7 통과)
 
 ## 4. 개별 테스트 실행 (실패한 테스트에 대해)
