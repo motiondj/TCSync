@@ -1,46 +1,46 @@
-# 타임코드 동기화 플러그인 테스트 체크리스트
+﻿# 타임코드 동기화 플러그인 테스트 체크리스트
 
 ## 1. 테스트 환경 준비
 
 ### 프로젝트 설정
-- ✅ 언리얼 엔진 5.5 에디터 실행
-- ✅ 플러그인 활성화 확인 (Edit → Plugins → TimecodeSync)
-- ✅ 테스트용 레벨 생성/열기
+- [x] 언리얼 엔진 5.5 에디터 실행
+- [x] 플러그인 활성화 확인 (Edit → Plugins → TimecodeSync)
+- [x] 테스트용 레벨 생성/열기
 
 ### 테스트 액터 설정
-- ✅ BP_TimecodeSyncTester 블루프린트 생성
-- ✅ TimecodeComponent 추가
-- ✅ RunIntegratedTest 함수 호출 로직 구성
-- ✅ 레벨에 테스터 인스턴스 배치
+- [x] BP_TimecodeSyncTester 블루프린트 생성
+- [x] TimecodeComponent 추가
+- [x] RunIntegratedTest 함수 호출 로직 구성
+- [x] 레벨에 테스터 인스턴스 배치
 
 ## 2. 타임코드 유틸리티 테스트
 
 ### 자동화 테스트 실행
-- ✅ Session Frontend 열기 (Window → Developer Tools → Session Frontend)
-- ✅ Automation 탭 선택
-- ✅ "TimecodeSync" 검색
-- ✅ TimecodeSync.Utils.Conversion 테스트 실행
-  - ✅ 결과: PASSED
-- ✅ TimecodeSync.Utils.DropFrame 테스트 실행
-  - ✅ 결과: PASSED
+- [x] Session Frontend 열기 (Window → Developer Tools → Session Frontend)
+- [x] Automation 탭 선택
+- [x] "TimecodeSync" 검색
+- [x] TimecodeSync.Utils.Conversion 테스트 실행
+  - [x] 결과: PASSED
+- [x] TimecodeSync.Utils.DropFrame 테스트 실행
+  - [x] 결과: PASSED
 
 ## 3. 통합 테스트 실행
 
 ### 테스트 실행 준비
-- ✅ BP_TimecodeSyncTester에 RunIntegratedTest 설정
-- ✅ Output Log 창 열기 (Window → Developer Tools → Output Log)
+- [x] BP_TimecodeSyncTester에 RunIntegratedTest 설정
+- [x] Output Log 창 열기 (Window → Developer Tools → Output Log)
 
 ### 통합 테스트 실행 및 결과 확인
-- ✅ Play 버튼 클릭하여 테스트 실행
-- ✅ 테스트 결과 관찰:
-  - ✅ UDP Connection: PASSED
-  - ✅ Message Serialization: FAILED
-  - ✅ Packet Loss Handling: FAILED
-  - ✅ Master/Slave Sync: FAILED
-  - ✅ Multiple Frame Rates: FAILED
-  - ✅ System Time Sync: FAILED
-  - ✅ Auto Role Detection: FAILED
-- ✅ 최종 통과율: 14.3% (1/7 통과)
+- [x] Play 버튼 클릭하여 테스트 실행
+- [x] 테스트 결과 관찰:
+  - [x] UDP Connection: PASSED
+  - [x] Message Serialization: FAILED
+  - [x] Packet Loss Handling: FAILED
+  - [x] Master/Slave Sync: FAILED
+  - [x] Multiple Frame Rates: FAILED
+  - [x] System Time Sync: FAILED
+  - [x] Auto Role Detection: FAILED
+- [x] 최종 통과율: 14.3% (1/7 통과)
 
 ## 4. 개별 테스트 실행 (실패한 테스트에 대해)
 
