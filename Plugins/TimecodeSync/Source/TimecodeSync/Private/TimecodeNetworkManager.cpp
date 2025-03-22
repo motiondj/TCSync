@@ -162,7 +162,8 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        TargetAddr->SetPort(PortNumber);
+        // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
+        TargetAddr->SetPort(TargetPortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message directly to Master: %s"),
@@ -181,7 +182,8 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        TargetAddr->SetPort(PortNumber);
+        // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
+        TargetAddr->SetPort(TargetPortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to target: %s"),
@@ -200,7 +202,8 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        MulticastAddr->SetPort(PortNumber);
+        // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
+        MulticastAddr->SetPort(TargetPortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to multicast group: %s"),

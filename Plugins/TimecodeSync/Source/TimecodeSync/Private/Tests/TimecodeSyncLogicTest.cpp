@@ -256,6 +256,10 @@ bool UTimecodeSyncLogicTest::TestMultipleFrameRates()
             continue;
         }
 
+        // 핵심 수정 - 대상 포트 설정 추가
+        MasterManager->SetTargetPort(SlavePort);  // 마스터는 슬레이브 포트로 전송
+        SlaveManager->SetTargetPort(MasterPort);  // 슬레이브는 마스터 포트로 전송
+
         // Set target IP for slave to master IP
         SlaveManager->SetTargetIP(TEXT("127.0.0.1"));
         MasterManager->SetTargetIP(TEXT("127.0.0.1"));
@@ -339,8 +343,13 @@ bool UTimecodeSyncLogicTest::TestSystemTimeSync()
         return bSuccess;
     }
 
+    // 핵심 수정 - 대상 포트 설정 추가
+    SenderManager->SetTargetPort(12361);  // 송신자는 수신자 포트로 전송
+    ReceiverManager->SetTargetPort(12360); // 수신자는 송신자 포트로 전송
+
     // Set target IP for receiver to sender IP
     ReceiverManager->SetTargetIP(TEXT("127.0.0.1"));
+    SenderManager->SetTargetIP(TEXT("127.0.0.1"));
 
     // Register message reception event
     ReceiverManager->OnMessageReceived.AddDynamic(this, &UTimecodeSyncLogicTest::OnSystemTimeReceived);
