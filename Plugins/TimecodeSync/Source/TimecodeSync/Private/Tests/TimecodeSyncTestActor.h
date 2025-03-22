@@ -25,6 +25,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test Settings")
     float SyncDuration;
 
+    // 통합 테스트 실행 함수
+    UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
+    void RunIntegratedTest();
+
 protected:
     virtual void BeginPlay() override;
 

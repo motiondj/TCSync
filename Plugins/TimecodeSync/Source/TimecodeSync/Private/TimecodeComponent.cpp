@@ -667,3 +667,58 @@ void UTimecodeComponent::OnNetworkRoleModeChanged(ETimecodeRoleMode NewMode)
             (RoleMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"));
     }
 }
+
+void UTimecodeComponent::LogDebugInfo()
+{
+    // Basic component info
+    UE_LOG(LogTimecodeComponent, Display, TEXT("===== Timecode Component Debug Info ====="));
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Owner: %s"), *GetOwner()->GetName());
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Current Timecode: %s"), *CurrentTimecode);
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Elapsed Time: %.3f seconds"), ElapsedTimeSeconds);
+
+    // Role info
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Role Mode: %s"),
+        (RoleMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"));
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Current Role: %s"), bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Manual Master Setting: %s"), bIsManuallyMaster ? TEXT("MASTER") : TEXT("SLAVE"));
+
+    if (!bIsMaster && RoleMode == ETimecodeRoleMode::Manual)
+    {
+        UE_LOG(LogTimecodeComponent, Display, TEXT("Master IP: %s"), *MasterIPAddress);
+    }
+
+    // Settings info
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Frame Rate: %.2f fps"), FrameRate);
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Drop Frame: %s"), bUseDropFrameTimecode ? TEXT("Yes") : TEXT("No"));
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Running: %s"), bIsRunning ? TEXT("Yes") : TEXT("No"));
+
+    // Network info
+    UE_LOG(LogTimecodeComponent, Display, TEXT("UDP Port: %d"), UDPPort);
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Target IP: %s"), *TargetIP);
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Multicast Group: %s"), *MulticastGroup);
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Sync Interval: %.3f seconds"), SyncInterval);
+
+    // Connection state
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Connection State: %s"),
+        ConnectionState == ENetworkConnectionState::Connected ? TEXT("Connected") :
+        ConnectionState == ENetworkConnectionState::Connecting ? TEXT("Connecting") :
+        TEXT("Disconnected"));
+
+    // Event info
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Registered Events: %d"), TimecodeEvents.Num());
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Triggered Events: %d"), TriggeredEvents.Num());
+
+    // Network manager status
+    if (NetworkManager)
+    {
+        UE_LOG(LogTimecodeComponent, Display, TEXT("Network Manager: Valid"));
+        UE_LOG(LogTimecodeComponent, Display, TEXT("Network Manager Connection: %s"),
+            NetworkManager->HasReceivedValidMessage() ? TEXT("Active") : TEXT("Inactive"));
+    }
+    else
+    {
+        UE_LOG(LogTimecodeComponent, Display, TEXT("Network Manager: Invalid/Null"));
+    }
+
+    UE_LOG(LogTimecodeComponent, Display, TEXT("========================================="));
+}

@@ -306,6 +306,64 @@ bool UTimecodeSyncLogicTest::TestSystemTimeSync()
     return bSuccess;
 }
 
+bool UTimecodeSyncLogicTest::TestAutoRoleDetection()
+{
+    bool bSuccess = false;
+    FString ResultMessage;
+
+    // Create two network managers for testing auto detection
+    UTimecodeNetworkManager* Manager1 = NewObject<UTimecodeNetworkManager>();
+    UTimecodeNetworkManager* Manager2 = NewObject<UTimecodeNetworkManager>();
+
+    if (!Manager1 || !Manager2)
+    {
+        LogTestResult(TEXT("Auto Role Detection"), false, TEXT("Failed to create network managers"));
+        return false;
+    }
+
+    // 1. Test automatic role detection mode
+    Manager1->SetRoleMode(ETimecodeRoleMode::Automatic);
+    Manager2->SetRoleMode(ETimecodeRoleMode::Automatic);
+
+    // Initialize with different ports
+    bool bManager1Init = Manager1->Initialize(false, 12370);
+    bool bManager2Init = Manager2->Initialize(false, 12371);
+
+    if (!bManager1Init || !bManager2Init)
+    {
+        if (Manager1) Manager1->Shutdown();
+        if (Manager2) Manager2->Shutdown();
+        LogTestResult(TEXT("Auto Role Detection"), false, TEXT("Failed to initialize managers"));
+        return false;
+    }
+
+    // Setup IP addresses
+    Manager1->SetTargetIP(TEXT("127.0.0.1"));
+    Manager2->SetTargetIP(TEXT("127.0.0.1"));
+
+    // Wait for auto detection to work
+    FPlatformProcess::Sleep(1.0f);
+
+    // Check roles - one should be master, one should be slave
+    bool bManager1IsMaster = Manager1->IsMaster();
+    bool bManager2IsMaster = Manager2->IsMaster();
+
+    // In auto mode, typically only one should become master
+    // This is a simplified test - in a real environment the detection would be more complex
+    bSuccess = (bManager1IsMaster != bManager2IsMaster);
+
+    ResultMessage = FString::Printf(TEXT("Manager1: %s, Manager2: %s"),
+        bManager1IsMaster ? TEXT("MASTER") : TEXT("SLAVE"),
+        bManager2IsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
+
+    // Cleanup
+    Manager1->Shutdown();
+    Manager2->Shutdown();
+
+    LogTestResult(TEXT("Auto Role Detection"), bSuccess, ResultMessage);
+    return bSuccess;
+}
+
 void UTimecodeSyncLogicTest::OnMasterMessageReceived(const FTimecodeNetworkMessage& Message)
 {
     if (Message.MessageType == ETimecodeMessageType::TimecodeSync)

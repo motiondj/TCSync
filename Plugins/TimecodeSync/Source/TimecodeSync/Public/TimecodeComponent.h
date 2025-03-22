@@ -222,6 +222,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Timecode Role")
     bool GetIsMaster() const;
 
+    // Log detailed debug information about the timecode component
+    UFUNCTION(BlueprintCallable, Category = "Timecode|Debug")
+    void LogDebugInfo();
+
 private:
     // Elapsed time in seconds
     float ElapsedTimeSeconds;

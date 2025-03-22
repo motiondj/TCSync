@@ -92,14 +92,6 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
     return bSuccess;
 }
 
-bool UTimecodeSyncNetworkTest::TestMessageSerialization()
-{
-    // Temporarily return Always Pass (needs actual project structure verification)
-    UE_LOG(LogTemp, Warning, TEXT("[TimecodeSyncTest] Message Serialization test not implemented yet - needs actual structure definition"));
-    LogTestResult(TEXT("Message Serialization"), true, TEXT("Test skipped - need actual implementation"));
-    return true;
-}
-
 bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
 {
     bool bSuccess = false;
@@ -227,4 +219,119 @@ void UTimecodeSyncNetworkTest::LogTestResult(const FString& TestName, bool bSucc
             FString::Printf(TEXT("[TimecodeSyncTest] %s: %s"), *TestName, *ResultStr));
         GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::White, Message);
     }
+}
+
+bool UTimecodeSyncNetworkTest::TestMessageSerialization()
+{
+    bool bSuccess = true;
+    FString ResultMessage;
+
+    // Test case 1: Basic timecode message
+    {
+        FTimecodeNetworkMessage OriginalMessage;
+        OriginalMessage.MessageType = ETimecodeMessageType::TimecodeSync;
+        OriginalMessage.Timecode = TEXT("01:23:45:15");
+        OriginalMessage.Data = TEXT("");
+        OriginalMessage.Timestamp = 1234567890.123;
+        OriginalMessage.SenderID = TEXT("TestSender1");
+
+        // Serialize
+        TArray<uint8> SerializedData = OriginalMessage.Serialize();
+
+        // Check data size
+        if (SerializedData.Num() <= 0)
+        {
+            bSuccess = false;
+            ResultMessage += TEXT("Test Case 1: Serialization failed - Empty data\n");
+        }
+        else
+        {
+            // Deserialize
+            FTimecodeNetworkMessage DeserializedMessage;
+            bool bDeserializeSuccess = DeserializedMessage.Deserialize(SerializedData);
+
+            // Check deserialization result
+            if (!bDeserializeSuccess)
+            {
+                bSuccess = false;
+                ResultMessage += TEXT("Test Case 1: Deserialization failed\n");
+            }
+            else
+            {
+                // Compare messages
+                bool bMessagesEqual =
+                    (DeserializedMessage.MessageType == OriginalMessage.MessageType) &&
+                    (DeserializedMessage.Timecode == OriginalMessage.Timecode) &&
+                    (DeserializedMessage.SenderID == OriginalMessage.SenderID);
+
+                if (!bMessagesEqual)
+                {
+                    bSuccess = false;
+                    ResultMessage += FString::Printf(TEXT("Test Case 1: Message mismatch - Original: %s, Deserialized: %s\n"),
+                        *OriginalMessage.Timecode, *DeserializedMessage.Timecode);
+                }
+                else
+                {
+                    ResultMessage += TEXT("Test Case 1: Successfully serialized and deserialized basic message\n");
+                }
+            }
+        }
+    }
+
+    // Test case 2: Event message
+    {
+        FTimecodeNetworkMessage OriginalMessage;
+        OriginalMessage.MessageType = ETimecodeMessageType::Event;
+        OriginalMessage.Timecode = TEXT("02:34:56:12");
+        OriginalMessage.Data = TEXT("TestEvent");
+        OriginalMessage.Timestamp = 9876543210.987;
+        OriginalMessage.SenderID = TEXT("TestSender2");
+
+        // Serialize
+        TArray<uint8> SerializedData = OriginalMessage.Serialize();
+
+        // Check data size
+        if (SerializedData.Num() <= 0)
+        {
+            bSuccess = false;
+            ResultMessage += TEXT("Test Case 2: Serialization failed - Empty data\n");
+        }
+        else
+        {
+            // Deserialize
+            FTimecodeNetworkMessage DeserializedMessage;
+            bool bDeserializeSuccess = DeserializedMessage.Deserialize(SerializedData);
+
+            // Check deserialization result
+            if (!bDeserializeSuccess)
+            {
+                bSuccess = false;
+                ResultMessage += TEXT("Test Case 2: Deserialization failed\n");
+            }
+            else
+            {
+                // Compare messages
+                bool bMessagesEqual =
+                    (DeserializedMessage.MessageType == OriginalMessage.MessageType) &&
+                    (DeserializedMessage.Timecode == OriginalMessage.Timecode) &&
+                    (DeserializedMessage.Data == OriginalMessage.Data) &&
+                    (DeserializedMessage.SenderID == OriginalMessage.SenderID);
+
+                if (!bMessagesEqual)
+                {
+                    bSuccess = false;
+                    ResultMessage += FString::Printf(TEXT("Test Case 2: Message mismatch - Original event: %s, Deserialized event: %s\n"),
+                        *OriginalMessage.Data, *DeserializedMessage.Data);
+                }
+                else
+                {
+                    ResultMessage += TEXT("Test Case 2: Successfully serialized and deserialized event message\n");
+                }
+            }
+        }
+    }
+
+    // Log overall result
+    LogTestResult(TEXT("Message Serialization"), bSuccess, ResultMessage);
+    return bSuccess;
 }

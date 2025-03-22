@@ -30,6 +30,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     bool TestSystemTimeSync();
 
+    // 자동 역할 감지 테스트
+    UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
+    bool TestAutoRoleDetection();
+
 private:
     // Timecode message reception handler (Master)
     UFUNCTION()
