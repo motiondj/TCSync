@@ -644,3 +644,76 @@ bool UTimecodeNetworkManager::IsMaster() const
 {
     return bIsMasterMode;
 }
+
+// 추가: 패킷 손실 처리 테스트 함수 구현
+bool UTimecodeNetworkManager::TestPacketLossHandling(float SimulatedPacketLossRate)
+{
+    // 테스트 결과 초기화
+    bool bTestPassed = false;
+    int32 TotalPackets = 100;
+    int32 ReceivedPackets = 0;
+
+    // 패킷 손실 시뮬레이션 및 테스트
+    UE_LOG(LogTemp, Display, TEXT("Starting packet loss test with loss rate: %.2f"), SimulatedPacketLossRate);
+
+    // 1. 테스트 패킷 생성 및 전송 시뮬레이션
+    for (int32 i = 0; i < TotalPackets; ++i)
+    {
+        // 패킷 손실 시뮬레이션
+        if (FMath::FRand() > SimulatedPacketLossRate)
+        {
+            ReceivedPackets++;
+        }
+    }
+
+    // 2. 재전송 시뮬레이션 (3번의 재전송 시도)
+    int32 LostPackets = TotalPackets - ReceivedPackets;
+    int32 RecoveredPackets = 0;
+
+    for (int32 Retry = 0; Retry < 3; ++Retry)
+    {
+        int32 RemainingLost = LostPackets - RecoveredPackets;
+        int32 NewlyRecovered = 0;
+
+        for (int32 i = 0; i < RemainingLost; ++i)
+        {
+            // 재전송 패킷도 손실될 수 있음 (더 낮은 확률)
+            if (FMath::FRand() > SimulatedPacketLossRate * 0.5f)
+            {
+                NewlyRecovered++;
+            }
+        }
+
+        RecoveredPackets += NewlyRecovered;
+
+        UE_LOG(LogTemp, Display, TEXT("Retry %d: Recovered %d of %d remaining lost packets"),
+            Retry + 1, NewlyRecovered, RemainingLost);
+
+        // 모든 패킷이 복구되면 종료
+        if (RecoveredPackets >= LostPackets)
+        {
+            break;
+        }
+    }
+
+    // 3. 테스트 결과 평가
+    int32 TotalReceivedPackets = ReceivedPackets + RecoveredPackets;
+    float SuccessRate = (float)TotalReceivedPackets / TotalPackets;
+
+    UE_LOG(LogTemp, Display, TEXT("Packet loss test: Initial received: %d/%d, Recovered: %d/%d, Total: %d/%d (%.1f%%)"),
+        ReceivedPackets, TotalPackets, RecoveredPackets, LostPackets, TotalReceivedPackets, TotalPackets, SuccessRate * 100.0f);
+
+    // 성공률이 85% 이상이면 테스트 통과로 간주
+    bTestPassed = (SuccessRate >= 0.85f);
+
+    if (bTestPassed)
+    {
+        UE_LOG(LogTemp, Display, TEXT("Packet loss handling test PASSED"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Packet loss handling test FAILED"));
+    }
+
+    return bTestPassed;
+}

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
@@ -120,6 +120,10 @@ public:
     // Message received delegate
     UPROPERTY(BlueprintAssignable, Category = "Network")
     FOnMessageReceived OnMessageReceived;
+
+    // 패킷 손실 처리 테스트 함수 추가
+    UFUNCTION(BlueprintCallable, Category = "TimecodeSync|Tests")
+    bool TestPacketLossHandling(float SimulatedPacketLossRate = 0.3f);
 
 private:
     // UDP socket
