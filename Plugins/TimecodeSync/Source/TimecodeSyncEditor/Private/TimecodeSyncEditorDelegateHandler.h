@@ -1,14 +1,12 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
 #include "TimecodeNetworkTypes.h"
 #include "TimecodeSyncEditorDelegateHandler.generated.h"
 
-// Timecode message delegate
+// 함수 포인터 타입 정의
 DECLARE_DELEGATE_OneParam(FOnTimecodeMessageReceivedDelegate, const FTimecodeNetworkMessage&);
-
-// Network state delegate
 DECLARE_DELEGATE_OneParam(FOnNetworkStateChangedDelegate, ENetworkConnectionState);
 
 UCLASS()
@@ -19,26 +17,24 @@ class TIMECODESYNCEDITOR_API UTimecodeSyncEditorDelegateHandler : public UObject
 public:
     UTimecodeSyncEditorDelegateHandler();
 
-    // Timecode message delegate
-    FOnTimecodeMessageReceivedDelegate OnTimecodeMessageReceived;
-
-    // Network state delegate
-    FOnNetworkStateChangedDelegate OnNetworkStateChanged;
-
-    // Handle timecode message
+    // 타임코드 메시지 수신 핸들러
     UFUNCTION()
     void HandleTimecodeMessage(const FTimecodeNetworkMessage& Message);
 
-    // Handle network state change
+    // 네트워크 상태 변경 핸들러
     UFUNCTION()
     void HandleNetworkStateChanged(ENetworkConnectionState NewState);
 
-    // Set callbacks
+    // 함수 포인터 타입 델리게이트
+    FOnTimecodeMessageReceivedDelegate OnTimecodeMessageReceived;
+    FOnNetworkStateChangedDelegate OnNetworkStateChanged;
+
+    // 콜백 설정 함수
     void SetTimecodeMessageCallback(TFunction<void(const FTimecodeNetworkMessage&)> Callback);
     void SetNetworkStateCallback(TFunction<void(ENetworkConnectionState)> Callback);
 
 private:
-    // Callback functions
+    // 콜백 함수 저장
     TFunction<void(const FTimecodeNetworkMessage&)> TimecodeMessageCallback;
     TFunction<void(ENetworkConnectionState)> NetworkStateCallback;
-}; 
+};

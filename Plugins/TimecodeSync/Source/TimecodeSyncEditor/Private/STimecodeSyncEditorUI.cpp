@@ -33,6 +33,7 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
     bIsMaster = false;
     bIsRunning = false;
     StatusMessage = FText::FromString(TEXT("Initializing..."));
+    CurrentRole = TEXT("Initializing...");
     TimecodeManager = nullptr;
     DelegateHandler = nullptr;
 
@@ -76,33 +77,36 @@ STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
         TickDelegateHandle.Reset();
     }
 
-    // 타임코드 매니저 종료 (별도 멤버 변수 체크 없이 함수 직접 호출)
+    // 타임코드 매니저 종료
     ShutdownTimecodeManager();
 }
 
 void STimecodeSyncEditorUI::ShutdownTimecodeManager()
 {
-    // 델리게이트 바인딩 해제
-    if (TimecodeManager && DelegateHandler)
+    // 델리게이트 등록 해제
+    if (DelegateHandler)
     {
-        TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler);
-        TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler);
-
         DelegateHandler->OnTimecodeMessageReceived.Unbind();
         DelegateHandler->OnNetworkStateChanged.Unbind();
     }
 
-    // 객체 정리
+    // 타임코드 매니저의 델리게이트 등록 해제
+    if (TimecodeManager && DelegateHandler)
+    {
+        TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler);
+        TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler);
+    }
+
+    // 타임코드 매니저 종료 호출
     if (TimecodeManager)
     {
         TimecodeManager->Shutdown();
-        TimecodeManager->RemoveFromRoot();
         TimecodeManager = nullptr;
     }
 
+    // 델리게이트 핸들러 제거
     if (DelegateHandler)
     {
-        DelegateHandler->RemoveFromRoot();
         DelegateHandler = nullptr;
     }
 }
@@ -670,10 +674,8 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         .FillWidth(1.0f)
                         [
                             SNew(STextBlock)
-                                .Text_Lambda([this]() -> FText {
-                                return GetConnectionStateText();
-                                    })
-                                .ColorAndOpacity(GetConnectionStateColor())
+                                .Text(this, &STimecodeSyncEditorUI::GetConnectionStateText)
+                                .ColorAndOpacity(this, &STimecodeSyncEditorUI::GetConnectionStateColor)
                         ]
                 ]
 
@@ -755,24 +757,24 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         ]
                 ]
 
-                // Status Text
-                + SVerticalBox::Slot()
-                .AutoHeight()
-                .Padding(0, 5)
-                [
-                    SNew(STextBlock)
-                        .Text_Lambda([this]() -> FText {
-                        return StatusMessage;
-                            })
-                        .ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
-                ]
-        ];
+                    // Status Text
+                    + SVerticalBox::Slot()
+                    .AutoHeight()
+                    .Padding(0, 5)
+                    [
+                        SNew(STextBlock)
+                            .Text_Lambda([this]() -> FText {
+                            return StatusMessage;
+                                })
+                            .ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
+                    ]
+       ];
 }
 
 void STimecodeSyncEditorUI::UpdateUI()
 {
     // 포인터 유효성 체크
-    if (!TimecodeManager.IsValid())
+    if (!TimecodeManager)
     {
         // 유효하지 않은 경우 기본값 설정
         CurrentTimecode = TEXT("--:--:--:--");
@@ -783,40 +785,32 @@ void STimecodeSyncEditorUI::UpdateUI()
         return;
     }
 
-    // 지역 변수에 현재 값 저장 (함수 호출 중 TimecodeManager가 무효화될 가능성 방지)
-    bool bHasValidCommunication = TimecodeManager->HasReceivedValidMessage();
-    ENetworkConnectionState CurrentConnectionState = TimecodeManager->GetConnectionState();
-    bool bCurrentIsMaster = TimecodeManager->IsMaster();
-    FString CurrentTimecodeValue = TimecodeManager->GetCurrentTimecode();
-
-    // 연결 상태 업데이트
-    ConnectionState = bHasValidCommunication ? CurrentConnectionState : ENetworkConnectionState::Disconnected;
+    // 네트워크 매니저가 연결 상태인지 확인
+    ConnectionState = TimecodeManager->GetConnectionState();
 
     // 역할 업데이트
-    if (!bHasValidCommunication)
-    {
-        CurrentRole = TEXT("Determining...");
-    }
-    else
-    {
-        bIsMaster = bCurrentIsMaster;
-        CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
-    }
+    bIsMaster = TimecodeManager->IsMaster();
+    CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
 
     // 타임코드 업데이트
-    if (!bHasValidCommunication)
+    FString ManagerTimecode = TimecodeManager->GetCurrentTimecode();
+    if (!ManagerTimecode.IsEmpty())
     {
-        CurrentTimecode = TEXT("--:--:--:--");
-    }
-    else
-    {
-        CurrentTimecode = CurrentTimecodeValue;
+        CurrentTimecode = ManagerTimecode;
     }
 
     // 상태 메시지 업데이트
-    if (!bHasValidCommunication)
+    if (ConnectionState == ENetworkConnectionState::Connected)
     {
-        StatusMessage = FText::FromString(TEXT("Waiting for connection..."));
+        StatusMessage = FText::FromString(TEXT("Connected"));
+    }
+    else if (ConnectionState == ENetworkConnectionState::Connecting)
+    {
+        StatusMessage = FText::FromString(TEXT("Connecting..."));
+    }
+    else
+    {
+        StatusMessage = FText::FromString(TEXT("Disconnected"));
     }
 }
 
@@ -952,89 +946,73 @@ void STimecodeSyncEditorUI::InitializeTimecodeManager()
     // 이미 초기화된 경우 이전 인스턴스 종료
     ShutdownTimecodeManager();
 
-    // 새 델리게이트 핸들러 생성
+    // 새로운 델리게이트 핸들러와 매니저 생성
     DelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
     if (!DelegateHandler)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create delegate handler"));
         return;
     }
-    DelegateHandler->AddToRoot(); // GC에서 제외
 
-    // 델리게이트 핸들러 콜백 설정
-    DelegateHandler->SetTimecodeMessageCallback([this](const FTimecodeNetworkMessage& Message) {
-        OnTimecodeMessageReceived(Message);
-        });
-
-    DelegateHandler->SetNetworkStateCallback([this](ENetworkConnectionState NewState) {
-        OnNetworkStateChanged(NewState);
-        });
-
-    // 타임코드 매니저 생성
     TimecodeManager = NewObject<UTimecodeNetworkManager>();
     if (!TimecodeManager)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create timecode manager"));
-        // 실패 시 델리게이트 핸들러도 정리
-        if (DelegateHandler)
-        {
-            DelegateHandler->RemoveFromRoot();
-            DelegateHandler = nullptr;
-        }
+        DelegateHandler = nullptr;
         return;
     }
-    TimecodeManager->AddToRoot(); // GC에서 제외
 
-    // 설정 가져오기
+    // 델리게이트 설정
+    DelegateHandler->SetTimecodeMessageCallback([this](const FTimecodeNetworkMessage& Message) {
+        this->OnTimecodeMessageReceived(Message);
+        });
+
+    DelegateHandler->SetNetworkStateCallback([this](ENetworkConnectionState NewState) {
+        this->OnNetworkStateChanged(NewState);
+        });
+
+    // 델리게이트 연결
+    TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
+    TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
+
+    // 타임코드 매니저 초기화
     UTimecodeSettings* Settings = GetTimecodeSettings();
     if (Settings)
     {
-        // 타임코드 매니저에 설정 적용
+        // 설정에서 초기 역할 가져오기
+        bool bIsMasterRole = (Settings->RoleMode == ETimecodeRoleMode::Manual) ?
+            Settings->bIsManualMaster : false; // 자동 모드는 초기에 slave로 시작
+
+        // 매니저 초기화
+        TimecodeManager->Initialize(bIsMasterRole, Settings->DefaultUDPPort);
+
+        // 추가 설정 적용
         TimecodeManager->SetRoleMode(Settings->RoleMode);
 
         if (Settings->RoleMode == ETimecodeRoleMode::Manual)
         {
             TimecodeManager->SetManualMaster(Settings->bIsManualMaster);
 
-            if (!Settings->bIsManualMaster)
+            if (!Settings->bIsManualMaster && !Settings->MasterIPAddress.IsEmpty())
             {
                 TimecodeManager->SetMasterIPAddress(Settings->MasterIPAddress);
             }
         }
-    }
 
-    // 타임코드 매니저와 델리게이트 핸들러 연결
-    TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
-    TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
-
-    // 타임코드 매니저 초기화 (기본값: 자동 감지, 기본 포트 사용)
-    bool bSuccess = TimecodeManager->Initialize(false, Settings ? Settings->DefaultUDPPort : 10000);
-
-    if (!bSuccess)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Failed to initialize timecode manager"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Log, TEXT("Timecode manager initialized successfully"));
-
-        // 필요한 경우 멀티캐스트 그룹 설정
-        if (Settings && !Settings->MulticastGroupAddress.IsEmpty())
+        // 멀티캐스트 그룹 설정
+        if (!Settings->MulticastGroupAddress.IsEmpty())
         {
             TimecodeManager->JoinMulticastGroup(Settings->MulticastGroupAddress);
         }
     }
-
-    // 초기 상태 업데이트
-    ConnectionState = TimecodeManager->GetConnectionState();
-    bIsMaster = TimecodeManager->IsMaster();
-    CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
-    StatusMessage = FText::FromString(TEXT("Timecode manager initialized"));
 }
 
 void STimecodeSyncEditorUI::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
 {
-    CurrentTimecode = Message.Timecode;
+    if (Message.MessageType == ETimecodeMessageType::TimecodeSync)
+    {
+        CurrentTimecode = Message.Timecode;
+    }
 }
 
 void STimecodeSyncEditorUI::OnNetworkStateChanged(ENetworkConnectionState NewState)
@@ -1101,12 +1079,14 @@ FText STimecodeSyncEditorUI::GetConnectionStateText() const
 {
     switch (ConnectionState)
     {
-        case ENetworkConnectionState::Connected:
-            return FText::FromString(TEXT("Connected"));
-        case ENetworkConnectionState::Disconnected:
-            return FText::FromString(TEXT("Waiting for connection..."));
-        default:
-            return FText::FromString(TEXT("Unknown"));
+    case ENetworkConnectionState::Connected:
+        return FText::FromString(TEXT("Connected"));
+    case ENetworkConnectionState::Connecting:
+        return FText::FromString(TEXT("Connecting..."));
+    case ENetworkConnectionState::Disconnected:
+        return FText::FromString(TEXT("Disconnected"));
+    default:
+        return FText::FromString(TEXT("Unknown"));
     }
 }
 
@@ -1114,12 +1094,14 @@ FSlateColor STimecodeSyncEditorUI::GetConnectionStateColor() const
 {
     switch (ConnectionState)
     {
-        case ENetworkConnectionState::Connected:
-            return FSlateColor(FLinearColor::Green);
-        case ENetworkConnectionState::Disconnected:
-            return FSlateColor(FLinearColor::Red);
-        default:
-            return FSlateColor(FLinearColor::Yellow);
+    case ENetworkConnectionState::Connected:
+        return FSlateColor(FLinearColor(0.2f, 0.8f, 0.2f)); // 녹색
+    case ENetworkConnectionState::Connecting:
+        return FSlateColor(FLinearColor(0.8f, 0.8f, 0.2f)); // 노란색
+    case ENetworkConnectionState::Disconnected:
+        return FSlateColor(FLinearColor(0.8f, 0.2f, 0.2f)); // 빨간색
+    default:
+        return FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)); // 회색
     }
 }
 
