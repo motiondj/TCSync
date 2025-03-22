@@ -80,54 +80,30 @@ STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
     ShutdownTimecodeManager();
 }
 
-// STimecodeSyncEditorUI.cpp
 void STimecodeSyncEditorUI::ShutdownTimecodeManager()
 {
-    // 1. 지역 변수에 현재 상태 저장 (중요: 체크한 후에 다시 체크하지 않음)
-    UTimecodeNetworkManager* TempManager = nullptr;
-    UTimecodeSyncEditorDelegateHandler* TempHandler = nullptr;
-
-    if (TimecodeManager.IsValid())
+    // 델리게이트 바인딩 해제
+    if (TimecodeManager && DelegateHandler)
     {
-        TempManager = TimecodeManager.Get();
+        TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler);
+        TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler);
+
+        DelegateHandler->OnTimecodeMessageReceived.Unbind();
+        DelegateHandler->OnNetworkStateChanged.Unbind();
     }
 
-    if (DelegateHandler.IsValid())
+    // 객체 정리
+    if (TimecodeManager)
     {
-        TempHandler = DelegateHandler.Get();
+        TimecodeManager->Shutdown();
+        TimecodeManager->RemoveFromRoot();
+        TimecodeManager = nullptr;
     }
 
-    // 2. 먼저 델리게이트 바인딩 제거
-    if (TempHandler)
+    if (DelegateHandler)
     {
-        TempHandler->OnTimecodeMessageReceived.Unbind();
-        TempHandler->OnNetworkStateChanged.Unbind();
-    }
-
-    // 3. 타임코드 매니저의 델리게이트 등록 해제
-    if (TempManager && TempHandler)
-    {
-        TempManager->OnTimecodeMessageReceived.RemoveAll(TempHandler);
-        TempManager->OnNetworkStateChanged.RemoveAll(TempHandler);
-    }
-
-    // 4. 타임코드 매니저 종료 호출
-    if (TempManager)
-    {
-        TempManager->Shutdown();
-    }
-
-    // 5. 스마트 포인터 정리 - 매우 중요한 순서
-    // UObject를 가리키는 포인터(TimecodeManager)를 먼저 해제
-    if (TimecodeManager.IsValid())
-    {
-        TimecodeManager.Reset();
-    }
-
-    // 그 다음 델리게이트 핸들러 해제
-    if (DelegateHandler.IsValid())
-    {
-        DelegateHandler.Reset();
+        DelegateHandler->RemoveFromRoot();
+        DelegateHandler = nullptr;
     }
 }
 
@@ -974,39 +950,86 @@ FText STimecodeSyncEditorUI::GetMasterIPText() const
 void STimecodeSyncEditorUI::InitializeTimecodeManager()
 {
     // 이미 초기화된 경우 이전 인스턴스 종료
-    if (TimecodeManager.IsValid() || DelegateHandler.IsValid())
-    {
-        ShutdownTimecodeManager();
-    }
+    ShutdownTimecodeManager();
 
-    // 새로운 델리게이트 핸들러와 매니저 생성
-    UTimecodeSyncEditorDelegateHandler* NewDelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
-    if (!NewDelegateHandler)
+    // 새 델리게이트 핸들러 생성
+    DelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
+    if (!DelegateHandler)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create delegate handler"));
         return;
     }
-    DelegateHandler = TSharedPtr<UTimecodeSyncEditorDelegateHandler>(NewDelegateHandler);
+    DelegateHandler->AddToRoot(); // GC에서 제외
 
-    UTimecodeNetworkManager* NewTimecodeManager = NewObject<UTimecodeNetworkManager>();
-    if (!NewTimecodeManager)
+    // 델리게이트 핸들러 콜백 설정
+    DelegateHandler->SetTimecodeMessageCallback([this](const FTimecodeNetworkMessage& Message) {
+        OnTimecodeMessageReceived(Message);
+        });
+
+    DelegateHandler->SetNetworkStateCallback([this](ENetworkConnectionState NewState) {
+        OnNetworkStateChanged(NewState);
+        });
+
+    // 타임코드 매니저 생성
+    TimecodeManager = NewObject<UTimecodeNetworkManager>();
+    if (!TimecodeManager)
     {
         UE_LOG(LogTemp, Error, TEXT("Failed to create timecode manager"));
-        DelegateHandler.Reset(); // 실패 시 이전에 생성된 객체 정리
+        // 실패 시 델리게이트 핸들러도 정리
+        if (DelegateHandler)
+        {
+            DelegateHandler->RemoveFromRoot();
+            DelegateHandler = nullptr;
+        }
         return;
     }
-    TimecodeManager = TSharedPtr<UTimecodeNetworkManager>(NewTimecodeManager);
+    TimecodeManager->AddToRoot(); // GC에서 제외
 
-    // 델리게이트 연결 전 유효성 다시 검사
-    if (TimecodeManager.IsValid() && DelegateHandler.IsValid())
+    // 설정 가져오기
+    UTimecodeSettings* Settings = GetTimecodeSettings();
+    if (Settings)
     {
-        // 바인딩 순서도 중요
-        DelegateHandler->OnTimecodeMessageReceived.BindRaw(this, &STimecodeSyncEditorUI::OnTimecodeMessageReceived);
-        DelegateHandler->OnNetworkStateChanged.BindRaw(this, &STimecodeSyncEditorUI::OnNetworkStateChanged);
+        // 타임코드 매니저에 설정 적용
+        TimecodeManager->SetRoleMode(Settings->RoleMode);
 
-        TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
-        TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
+        if (Settings->RoleMode == ETimecodeRoleMode::Manual)
+        {
+            TimecodeManager->SetManualMaster(Settings->bIsManualMaster);
+
+            if (!Settings->bIsManualMaster)
+            {
+                TimecodeManager->SetMasterIPAddress(Settings->MasterIPAddress);
+            }
+        }
     }
+
+    // 타임코드 매니저와 델리게이트 핸들러 연결
+    TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
+    TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
+
+    // 타임코드 매니저 초기화 (기본값: 자동 감지, 기본 포트 사용)
+    bool bSuccess = TimecodeManager->Initialize(false, Settings ? Settings->DefaultUDPPort : 10000);
+
+    if (!bSuccess)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to initialize timecode manager"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Log, TEXT("Timecode manager initialized successfully"));
+
+        // 필요한 경우 멀티캐스트 그룹 설정
+        if (Settings && !Settings->MulticastGroupAddress.IsEmpty())
+        {
+            TimecodeManager->JoinMulticastGroup(Settings->MulticastGroupAddress);
+        }
+    }
+
+    // 초기 상태 업데이트
+    ConnectionState = TimecodeManager->GetConnectionState();
+    bIsMaster = TimecodeManager->IsMaster();
+    CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
+    StatusMessage = FText::FromString(TEXT("Timecode manager initialized"));
 }
 
 void STimecodeSyncEditorUI::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)

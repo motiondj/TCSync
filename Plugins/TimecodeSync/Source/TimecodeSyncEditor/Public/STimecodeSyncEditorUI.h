@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
@@ -59,8 +59,10 @@ private:
     FText StatusMessage;
 
     // Network manager and delegate handler
-    TSharedPtr<UTimecodeNetworkManager> TimecodeManager;
-    TSharedPtr<UTimecodeSyncEditorDelegateHandler> DelegateHandler;
+    UPROPERTY()
+    UTimecodeNetworkManager* TimecodeManager;
+    UPROPERTY()
+    UTimecodeSyncEditorDelegateHandler* DelegateHandler;
 
     // Event handlers
     void OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message);
