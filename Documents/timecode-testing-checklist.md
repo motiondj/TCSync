@@ -3,15 +3,15 @@
 ## 1. 테스트 환경 준비
 
 ### 프로젝트 설정
-- [ ] 언리얼 엔진 5.5 에디터 실행
-- [ ] 플러그인 활성화 확인 (Edit → Plugins → TimecodeSync)
-- [ ] 테스트용 레벨 생성/열기
+- ✅ 언리얼 엔진 5.5 에디터 실행
+- ✅ 플러그인 활성화 확인 (Edit → Plugins → TimecodeSync)
+- ✅ 테스트용 레벨 생성/열기
 
 ### 테스트 액터 설정
-- [ ] BP_TimecodeSyncTester 블루프린트 생성
-- [ ] TimecodeComponent 추가
-- [ ] RunIntegratedTest 함수 호출 로직 구성
-- [ ] 레벨에 테스터 인스턴스 배치
+- ✅ BP_TimecodeSyncTester 블루프린트 생성
+- ✅ TimecodeComponent 추가
+- ✅ RunIntegratedTest 함수 호출 로직 구성
+- ✅ 레벨에 테스터 인스턴스 배치
 
 ## 2. 타임코드 유틸리티 테스트
 
