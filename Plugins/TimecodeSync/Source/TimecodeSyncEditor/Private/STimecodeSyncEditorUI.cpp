@@ -69,45 +69,53 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
 
 STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
 {
-    // 타이머 중지
+    // 타이머 중지 먼저 수행하여 UI 업데이트 멈춤
     if (TickDelegateHandle.IsValid())
     {
         FTSTicker::GetCoreTicker().RemoveTicker(TickDelegateHandle);
         TickDelegateHandle.Reset();
     }
 
-    // 타임코드 매니저 종료
-    if (TimecodeManager.IsValid() || DelegateHandler.IsValid())
-    {
-        ShutdownTimecodeManager();
-    }
+    // 타임코드 매니저 종료 (별도 멤버 변수 체크 없이 함수 직접 호출)
+    ShutdownTimecodeManager();
 }
 
 void STimecodeSyncEditorUI::ShutdownTimecodeManager()
 {
-    // 먼저 델리게이트 핸들러의 바인딩 해제
-    if (DelegateHandler.IsValid())
+    // 1. 지역 변수에 현재 상태 저장 (포인터 체크를 한 번만 수행)
+    bool bHasValidDelegateHandler = DelegateHandler.IsValid();
+    bool bHasValidManager = TimecodeManager.IsValid();
+
+    // 2. 먼저 델리게이트 바인딩 제거
+    if (bHasValidDelegateHandler)
     {
         DelegateHandler->OnTimecodeMessageReceived.Unbind();
         DelegateHandler->OnNetworkStateChanged.Unbind();
     }
-    
-    // 타임코드 매니저의 델리게이트를 제거
-    if (TimecodeManager.IsValid() && DelegateHandler.IsValid())
+
+    // 3. 타임코드 매니저의 델리게이트 등록 해제
+    if (bHasValidManager && bHasValidDelegateHandler)
     {
         TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler.Get());
         TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler.Get());
     }
-    
-    // 타임코드 매니저 종료
-    if (TimecodeManager.IsValid())
+
+    // 4. 타임코드 매니저 종료 호출
+    if (bHasValidManager)
     {
         TimecodeManager->Shutdown();
     }
-    
-    // 스마트 포인터 정리 - 순서 변경
-    TimecodeManager.Reset();
-    DelegateHandler.Reset();
+
+    // 5. 스마트 포인터 정리 - 순서 변경 (TimecodeManager를 먼저 Reset)
+    if (bHasValidManager)
+    {
+        TimecodeManager.Reset(); // UObject를 먼저 해제
+    }
+
+    if (bHasValidDelegateHandler)
+    {
+        DelegateHandler.Reset(); // 그 다음 델리게이트 핸들러 해제
+    }
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
@@ -774,40 +782,49 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
 
 void STimecodeSyncEditorUI::UpdateUI()
 {
+    // 포인터 유효성 체크
     if (!TimecodeManager.IsValid())
     {
+        // 유효하지 않은 경우 기본값 설정
         CurrentTimecode = TEXT("--:--:--:--");
         ConnectionState = ENetworkConnectionState::Disconnected;
         bIsMaster = false;
+        CurrentRole = TEXT("Not Connected");
+        StatusMessage = FText::FromString(TEXT("Manager not available"));
         return;
     }
 
-    // Update connection state and role only when we have actual communication
+    // 지역 변수에 현재 값 저장 (함수 호출 중 TimecodeManager가 무효화될 가능성 방지)
     bool bHasValidCommunication = TimecodeManager->HasReceivedValidMessage();
-    ConnectionState = bHasValidCommunication ? TimecodeManager->GetConnectionState() : ENetworkConnectionState::Disconnected;
-    
-    // Update role display
+    ENetworkConnectionState CurrentConnectionState = TimecodeManager->GetConnectionState();
+    bool bCurrentIsMaster = TimecodeManager->IsMaster();
+    FString CurrentTimecodeValue = TimecodeManager->GetCurrentTimecode();
+
+    // 연결 상태 업데이트
+    ConnectionState = bHasValidCommunication ? CurrentConnectionState : ENetworkConnectionState::Disconnected;
+
+    // 역할 업데이트
     if (!bHasValidCommunication)
     {
         CurrentRole = TEXT("Determining...");
     }
     else
     {
-        bIsMaster = TimecodeManager->IsMaster();
+        bIsMaster = bCurrentIsMaster;
         CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
     }
 
-    // Update timecode display
+    // 타임코드 업데이트
     if (!bHasValidCommunication)
     {
         CurrentTimecode = TEXT("--:--:--:--");
     }
     else
     {
-        CurrentTimecode = TimecodeManager->GetCurrentTimecode();
+        CurrentTimecode = CurrentTimecodeValue;
     }
 
-    // Update status message if needed
+    // 상태 메시지 업데이트
     if (!bHasValidCommunication)
     {
         StatusMessage = FText::FromString(TEXT("Waiting for connection..."));
@@ -943,23 +960,39 @@ FText STimecodeSyncEditorUI::GetMasterIPText() const
 
 void STimecodeSyncEditorUI::InitializeTimecodeManager()
 {
-    // Create delegate handler
+    // 이미 초기화된 경우 이전 인스턴스 종료
+    if (TimecodeManager.IsValid() || DelegateHandler.IsValid())
+    {
+        ShutdownTimecodeManager();
+    }
+
+    // 새로운 델리게이트 핸들러와 매니저 생성
     UTimecodeSyncEditorDelegateHandler* NewDelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
+    if (!NewDelegateHandler)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create delegate handler"));
+        return;
+    }
     DelegateHandler = TSharedPtr<UTimecodeSyncEditorDelegateHandler>(NewDelegateHandler);
-    
-    // Create timecode manager
+
     UTimecodeNetworkManager* NewTimecodeManager = NewObject<UTimecodeNetworkManager>();
+    if (!NewTimecodeManager)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create timecode manager"));
+        DelegateHandler.Reset(); // 실패 시 이전에 생성된 객체 정리
+        return;
+    }
     TimecodeManager = TSharedPtr<UTimecodeNetworkManager>(NewTimecodeManager);
-    
-    // Set up callbacks
+
+    // 델리게이트 연결 전 유효성 다시 검사
     if (TimecodeManager.IsValid() && DelegateHandler.IsValid())
     {
-        TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
-        TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
-        
-        // Connect delegate handler to UI
+        // 바인딩 순서도 중요
         DelegateHandler->OnTimecodeMessageReceived.BindRaw(this, &STimecodeSyncEditorUI::OnTimecodeMessageReceived);
         DelegateHandler->OnNetworkStateChanged.BindRaw(this, &STimecodeSyncEditorUI::OnNetworkStateChanged);
+
+        TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
+        TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler.Get(), &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
     }
 }
 
