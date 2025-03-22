@@ -40,7 +40,7 @@ public:
     bool bIsMaster;
 
     // Master flag setting in manual mode
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditConditionHides, EditCondition = "RoleMode==0"))
     bool bIsManuallyMaster;
 
     // Master IP setting (used in manual slave mode)
