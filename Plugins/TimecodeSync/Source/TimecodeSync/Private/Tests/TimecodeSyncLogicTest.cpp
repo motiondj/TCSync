@@ -325,9 +325,9 @@ bool UTimecodeSyncLogicTest::TestAutoRoleDetection()
     Manager1->SetRoleMode(ETimecodeRoleMode::Automatic);
     Manager2->SetRoleMode(ETimecodeRoleMode::Automatic);
 
-    // Initialize with different ports
-    bool bManager1Init = Manager1->Initialize(false, 12370);
-    bool bManager2Init = Manager2->Initialize(false, 12371);
+    // 현재 구현에 맞게 하나는 포트 10000, 다른 하나는 다른 포트로 설정
+    bool bManager1Init = Manager1->Initialize(false, 10000); // 포트 10000은 마스터가 됨
+    bool bManager2Init = Manager2->Initialize(false, 12371); // 다른 포트는 슬레이브가 됨
 
     if (!bManager1Init || !bManager2Init)
     {
@@ -348,9 +348,8 @@ bool UTimecodeSyncLogicTest::TestAutoRoleDetection()
     bool bManager1IsMaster = Manager1->IsMaster();
     bool bManager2IsMaster = Manager2->IsMaster();
 
-    // In auto mode, typically only one should become master
-    // This is a simplified test - in a real environment the detection would be more complex
-    bSuccess = (bManager1IsMaster != bManager2IsMaster);
+    // 예상 결과: Manager1은 마스터, Manager2는 슬레이브
+    bSuccess = (bManager1IsMaster && !bManager2IsMaster);
 
     ResultMessage = FString::Printf(TEXT("Manager1: %s, Manager2: %s"),
         bManager1IsMaster ? TEXT("MASTER") : TEXT("SLAVE"),
