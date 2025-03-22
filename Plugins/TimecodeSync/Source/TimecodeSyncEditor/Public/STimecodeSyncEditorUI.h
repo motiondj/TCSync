@@ -67,9 +67,9 @@ private:
     TArray<TSharedPtr<FText>> RoleModeOptions;
     TArray<TSharedPtr<FString>> FrameRateOptions;
 
-    // 상태 변수들
+    // State variables
     FString CurrentTimecode;
-    FString CurrentRole;
+    FString CurrentRole;  // 이 변수 추가
     ENetworkConnectionState ConnectionState;
     bool bIsMaster;
     bool bIsRunning;

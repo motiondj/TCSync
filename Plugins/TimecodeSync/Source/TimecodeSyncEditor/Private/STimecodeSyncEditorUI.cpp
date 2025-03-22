@@ -37,6 +37,11 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
     TimecodeManager = nullptr;
     DelegateHandler = nullptr;
 
+    // 추가 초기화
+    TimecodeManager = nullptr;
+    DelegateHandler = nullptr;
+    CurrentRole = TEXT("Not Connected");
+
     // Create main UI
     ChildSlot
         [
@@ -68,6 +73,7 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
     );
 }
 
+// 소멸자 수정
 STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
 {
     // 타이머 중지 먼저 수행하여 UI 업데이트 멈춤
@@ -81,34 +87,25 @@ STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
     ShutdownTimecodeManager();
 }
 
+
 void STimecodeSyncEditorUI::ShutdownTimecodeManager()
 {
-    // 델리게이트 등록 해제
-    if (DelegateHandler)
-    {
-        DelegateHandler->OnTimecodeMessageReceived.Unbind();
-        DelegateHandler->OnNetworkStateChanged.Unbind();
-    }
-
-    // 타임코드 매니저의 델리게이트 등록 해제
-    if (TimecodeManager && DelegateHandler)
+    // 델리게이트 제거
+    if (DelegateHandler != nullptr && TimecodeManager != nullptr)
     {
         TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler);
         TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler);
     }
 
-    // 타임코드 매니저 종료 호출
-    if (TimecodeManager)
+    // 타임코드 매니저 종료
+    if (TimecodeManager != nullptr)
     {
         TimecodeManager->Shutdown();
         TimecodeManager = nullptr;
     }
 
-    // 델리게이트 핸들러 제거
-    if (DelegateHandler)
-    {
-        DelegateHandler = nullptr;
-    }
+    // 델리게이트 핸들러 정리
+    DelegateHandler = nullptr;
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
@@ -628,7 +625,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         ]
                 ]
 
-                // Current Timecode
+                // Current Role (첫 번째 항목)
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
@@ -640,7 +637,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         .Padding(0, 0, 10, 0)
                         [
                             SNew(STextBlock)
-                                .Text(LOCTEXT("CurrentTimecode", "Current Timecode:"))
+                                .Text(LOCTEXT("CurrentRole", "Current Role:"))
                                 .MinDesiredWidth(120)
                         ]
                         + SHorizontalBox::Slot()
@@ -648,10 +645,14 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         [
                             SNew(STextBlock)
                                 .Text_Lambda([this]() -> FText {
-                                return FText::FromString(CurrentTimecode);
+                                return FText::FromString(CurrentRole);
                                     })
-                                .ColorAndOpacity(FSlateColor(FLinearColor(0.1f, 0.8f, 0.1f)))
-                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+                                .ColorAndOpacity_Lambda([this]() -> FSlateColor {
+                                return bIsMaster ?
+                                    FSlateColor(FLinearColor(0.8f, 0.2f, 0.2f)) : // Red for Master
+                                    FSlateColor(FLinearColor(0.2f, 0.2f, 0.8f));  // Blue for Slave
+                                    })
+                                .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
                         ]
                 ]
 
@@ -679,7 +680,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         ]
                 ]
 
-                // Role Status
+                // Current Timecode (두 번째 항목을 변경)
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
@@ -691,7 +692,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         .Padding(0, 0, 10, 0)
                         [
                             SNew(STextBlock)
-                                .Text(LOCTEXT("CurrentRole", "Current Role:"))
+                                .Text(LOCTEXT("CurrentTimecode", "Current Timecode:"))
                                 .MinDesiredWidth(120)
                         ]
                         + SHorizontalBox::Slot()
@@ -699,13 +700,9 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         [
                             SNew(STextBlock)
                                 .Text_Lambda([this]() -> FText {
-                                return FText::FromString(CurrentRole);
+                                return FText::FromString(CurrentTimecode);
                                     })
-                                .ColorAndOpacity_Lambda([this]() -> FSlateColor {
-                                return bIsMaster ?
-                                    FSlateColor(FLinearColor(0.8f, 0.2f, 0.2f)) : // Red for Master
-                                    FSlateColor(FLinearColor(0.2f, 0.2f, 0.8f));  // Blue for Slave
-                                    })
+                                .ColorAndOpacity(FSlateColor(FLinearColor(0.1f, 0.8f, 0.1f)))
                                 .Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
                         ]
                 ]
@@ -757,24 +754,24 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateMonitoringSection()
                         ]
                 ]
 
-                    // Status Text
-                    + SVerticalBox::Slot()
-                    .AutoHeight()
-                    .Padding(0, 5)
-                    [
-                        SNew(STextBlock)
-                            .Text_Lambda([this]() -> FText {
-                            return StatusMessage;
-                                })
-                            .ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
-                    ]
-       ];
+                // Status Text
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(STextBlock)
+                        .Text_Lambda([this]() -> FText {
+                        return StatusMessage;
+                            })
+                        .ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
+                ]
+        ];
 }
 
 void STimecodeSyncEditorUI::UpdateUI()
 {
     // 포인터 유효성 체크
-    if (!TimecodeManager)
+    if (TimecodeManager == nullptr)
     {
         // 유효하지 않은 경우 기본값 설정
         CurrentTimecode = TEXT("--:--:--:--");
@@ -785,32 +782,53 @@ void STimecodeSyncEditorUI::UpdateUI()
         return;
     }
 
-    // 네트워크 매니저가 연결 상태인지 확인
-    ConnectionState = TimecodeManager->GetConnectionState();
+    // 타임코드 매니저로부터 정보 가져오기
+    bool bHasValidCommunication = TimecodeManager->HasReceivedValidMessage();
+    ENetworkConnectionState CurrentConnectionState = TimecodeManager->GetConnectionState();
+    bool bCurrentIsMaster = TimecodeManager->IsMaster();
+    FString CurrentTimecodeValue = TimecodeManager->GetCurrentTimecode();
 
-    // 역할 업데이트
-    bIsMaster = TimecodeManager->IsMaster();
+    // 연결 상태 업데이트
+    ConnectionState = CurrentConnectionState;
+
+    // 역할 상태 업데이트
+    bIsMaster = bCurrentIsMaster;
     CurrentRole = bIsMaster ? TEXT("MASTER") : TEXT("SLAVE");
 
-    // 타임코드 업데이트
-    FString ManagerTimecode = TimecodeManager->GetCurrentTimecode();
-    if (!ManagerTimecode.IsEmpty())
-    {
-        CurrentTimecode = ManagerTimecode;
-    }
+    // 역할 모드 (자동/수동) 상태 표시 추가
+    ETimecodeRoleMode CurrentRoleMode = TimecodeManager->GetRoleMode();
+    FString RoleModeStr = (CurrentRoleMode == ETimecodeRoleMode::Automatic) ?
+        TEXT("(Auto)") : TEXT("(Manual)");
+    CurrentRole = FString::Printf(TEXT("%s %s"), *CurrentRole, *RoleModeStr);
 
-    // 상태 메시지 업데이트
-    if (ConnectionState == ENetworkConnectionState::Connected)
+    // 타임코드 업데이트
+    if (ConnectionState == ENetworkConnectionState::Connected && !CurrentTimecodeValue.IsEmpty())
     {
-        StatusMessage = FText::FromString(TEXT("Connected"));
-    }
-    else if (ConnectionState == ENetworkConnectionState::Connecting)
-    {
-        StatusMessage = FText::FromString(TEXT("Connecting..."));
+        CurrentTimecode = CurrentTimecodeValue;
     }
     else
     {
-        StatusMessage = FText::FromString(TEXT("Disconnected"));
+        CurrentTimecode = TEXT("--:--:--:--");
+    }
+
+    // 상태 메시지 업데이트
+    switch (ConnectionState)
+    {
+    case ENetworkConnectionState::Connected:
+        StatusMessage = FText::FromString(TEXT("Connected and syncing"));
+        break;
+    case ENetworkConnectionState::Connecting:
+        StatusMessage = FText::FromString(TEXT("Connecting..."));
+        break;
+    case ENetworkConnectionState::Disconnected:
+        StatusMessage = FText::FromString(TEXT("Disconnected - Check network settings"));
+        break;
+    }
+
+    // 통신 상태에 따른 추가 메시지
+    if (!bHasValidCommunication && ConnectionState == ENetworkConnectionState::Connected)
+    {
+        StatusMessage = FText::FromString(TEXT("Connected but no sync data received"));
     }
 }
 
@@ -943,26 +961,35 @@ FText STimecodeSyncEditorUI::GetMasterIPText() const
 
 void STimecodeSyncEditorUI::InitializeTimecodeManager()
 {
-    // 이미 초기화된 경우 이전 인스턴스 종료
+    // 이전 인스턴스 종료
     ShutdownTimecodeManager();
 
-    // 새로운 델리게이트 핸들러와 매니저 생성
-    DelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
-    if (!DelegateHandler)
+    // 설정 불러오기
+    UTimecodeSettings* Settings = GetTimecodeSettings();
+    if (!Settings)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create delegate handler"));
+        StatusMessage = FText::FromString(TEXT("Failed to load settings"));
         return;
     }
 
+    // 델리게이트 핸들러 생성
+    DelegateHandler = NewObject<UTimecodeSyncEditorDelegateHandler>();
+    if (!DelegateHandler)
+    {
+        StatusMessage = FText::FromString(TEXT("Failed to create delegate handler"));
+        return;
+    }
+
+    // 타임코드 매니저 생성
     TimecodeManager = NewObject<UTimecodeNetworkManager>();
     if (!TimecodeManager)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create timecode manager"));
+        StatusMessage = FText::FromString(TEXT("Failed to create timecode manager"));
         DelegateHandler = nullptr;
         return;
     }
 
-    // 델리게이트 설정
+    // 콜백 함수 설정
     DelegateHandler->SetTimecodeMessageCallback([this](const FTimecodeNetworkMessage& Message) {
         this->OnTimecodeMessageReceived(Message);
         });
@@ -971,39 +998,39 @@ void STimecodeSyncEditorUI::InitializeTimecodeManager()
         this->OnNetworkStateChanged(NewState);
         });
 
-    // 델리게이트 연결
+    // 바인딩
     TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
     TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
 
-    // 타임코드 매니저 초기화
-    UTimecodeSettings* Settings = GetTimecodeSettings();
-    if (Settings)
+    // 설정 적용
+    TimecodeManager->SetRoleMode(Settings->RoleMode);
+    if (Settings->RoleMode == ETimecodeRoleMode::Manual)
     {
-        // 설정에서 초기 역할 가져오기
-        bool bIsMasterRole = (Settings->RoleMode == ETimecodeRoleMode::Manual) ?
-            Settings->bIsManualMaster : false; // 자동 모드는 초기에 slave로 시작
-
-        // 매니저 초기화
-        TimecodeManager->Initialize(bIsMasterRole, Settings->DefaultUDPPort);
-
-        // 추가 설정 적용
-        TimecodeManager->SetRoleMode(Settings->RoleMode);
-
-        if (Settings->RoleMode == ETimecodeRoleMode::Manual)
+        TimecodeManager->SetManualMaster(Settings->bIsManualMaster);
+        if (!Settings->bIsManualMaster && !Settings->MasterIPAddress.IsEmpty())
         {
-            TimecodeManager->SetManualMaster(Settings->bIsManualMaster);
-
-            if (!Settings->bIsManualMaster && !Settings->MasterIPAddress.IsEmpty())
-            {
-                TimecodeManager->SetMasterIPAddress(Settings->MasterIPAddress);
-            }
+            TimecodeManager->SetMasterIPAddress(Settings->MasterIPAddress);
         }
+    }
 
+    // 네트워크 초기화
+    bool bIsMasterRole = (Settings->RoleMode == ETimecodeRoleMode::Manual) ?
+        Settings->bIsManualMaster : false; // 자동 모드에서는 초기값 설정
+    bool bSuccess = TimecodeManager->Initialize(bIsMasterRole, Settings->DefaultUDPPort);
+
+    if (bSuccess)
+    {
         // 멀티캐스트 그룹 설정
         if (!Settings->MulticastGroupAddress.IsEmpty())
         {
             TimecodeManager->JoinMulticastGroup(Settings->MulticastGroupAddress);
         }
+
+        StatusMessage = FText::FromString(TEXT("Timecode manager initialized"));
+    }
+    else
+    {
+        StatusMessage = FText::FromString(TEXT("Failed to initialize network"));
     }
 }
 
@@ -1036,7 +1063,7 @@ void STimecodeSyncEditorUI::OnNetworkStateChanged(ENetworkConnectionState NewSta
 
 void STimecodeSyncEditorUI::StartTimecode()
 {
-    if (TimecodeManager && ConnectionState == ENetworkConnectionState::Connected)
+    if (TimecodeManager != nullptr && ConnectionState == ENetworkConnectionState::Connected)
     {
         bIsRunning = true;
         StatusMessage = FText::FromString(TEXT("Timecode started"));
@@ -1052,7 +1079,7 @@ void STimecodeSyncEditorUI::StartTimecode()
 
 void STimecodeSyncEditorUI::StopTimecode()
 {
-    if (TimecodeManager && bIsRunning)
+    if (TimecodeManager != nullptr && bIsRunning)
     {
         bIsRunning = false;
         StatusMessage = FText::FromString(TEXT("Timecode stopped"));
@@ -1064,7 +1091,7 @@ void STimecodeSyncEditorUI::StopTimecode()
 
 void STimecodeSyncEditorUI::ResetTimecode()
 {
-    if (TimecodeManager)
+    if (TimecodeManager != nullptr)
     {
         // 타임코드 리셋
         CurrentTimecode = TEXT("00:00:00:00");
