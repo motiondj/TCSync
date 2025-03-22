@@ -1,4 +1,4 @@
-#include "TimecodeNetworkManager.h"
+﻿#include "TimecodeNetworkManager.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
 #include "Common/UdpSocketReceiver.h"
@@ -46,6 +46,10 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
         Shutdown();
     }
 
+    // 먼저 포트 번호 설정 (이 부분이 중요합니다)
+    PortNumber = Port;
+
+
     // Determine role
     if (RoleMode == ETimecodeRoleMode::Automatic)
     {
@@ -59,8 +63,6 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
         bRoleAutomaticallyDetermined = false;
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Manual role setting: %s"), bIsMasterMode ? TEXT("MASTER") : TEXT("SLAVE"));
     }
-
-    PortNumber = Port;
 
     // Create socket
     if (!CreateSocket())
@@ -549,41 +551,85 @@ void UTimecodeNetworkManager::SendHeartbeat()
 
 bool UTimecodeNetworkManager::AutoDetectRole()
 {
-    // Get local IP address
+    bool bFoundValidIP = false;
+    FString LocalIP;
+
+    // 로컬 IP 주소 가져오기 - 더 강력한 방식으로 구현
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-    bool bCanBindAll = false;
-    TSharedPtr<FInternetAddr> LocalAddr = SocketSubsystem->GetLocalHostAddr(*GLog, bCanBindAll);
-
-    if (LocalAddr.IsValid() && bCanBindAll)
+    if (SocketSubsystem)
     {
-        // Print IP address
-        FString LocalIP = LocalAddr->ToString(false);
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Local IP: %s"), *LocalIP);
+        // 호스트 이름 얻기
+        FString HostName;
+        if (SocketSubsystem->GetHostName(HostName))
+        {
+            // 호스트의 주소 정보 얻기
+            TSharedPtr<FInternetAddr> LocalAddr = SocketSubsystem->GetLocalBindAddr(*GLog);
+            if (LocalAddr.IsValid())
+            {
+                LocalIP = LocalAddr->ToString(false); // 포트 번호 제외
 
-        // nDisplay integration code can be added here
+                // 유효한 IP 주소인지 확인 (127.0.0.1이 아닌지)
+                if (!LocalIP.IsEmpty() && !LocalIP.Equals(TEXT("127.0.0.1")) && !LocalIP.Equals(TEXT("0.0.0.0")))
+                {
+                    bFoundValidIP = true;
+                    UE_LOG(LogTimecodeNetwork, Log, TEXT("Local IP detected: %s"), *LocalIP);
+                }
+            }
+        }
 
-        // IP-based simple decision logic
-        // In actual implementation, you should search for other nodes using UDP broadcast
-        // and compare IPs or use other methods to determine the master
+        // 위 방법이 실패하면 다른 방법으로 시도
+        if (!bFoundValidIP)
+        {
+            bool bCanBindAll = false;
+            TSharedPtr<FInternetAddr> HostAddr = SocketSubsystem->GetLocalHostAddr(*GLog, bCanBindAll);
+            if (HostAddr.IsValid())
+            {
+                LocalIP = HostAddr->ToString(false);
+                if (!LocalIP.IsEmpty() && !LocalIP.Equals(TEXT("127.0.0.1")) && !LocalIP.Equals(TEXT("0.0.0.0")))
+                {
+                    bFoundValidIP = true;
+                    UE_LOG(LogTimecodeNetwork, Log, TEXT("Local IP detected (alternative method): %s"), *LocalIP);
+                }
+            }
+        }
 
-        // Discover message broadcast to search for other nodes
-        // Implement logic to wait for response and compare IPs
+        // 네트워크 인터페이스를 순회하여 모든 IP 주소 확인 (더 확실한 방법)
+        if (!bFoundValidIP)
+        {
+            TArray<TSharedPtr<FInternetAddr>> LocalAddresses;
+            SocketSubsystem->GetLocalAdapterAddresses(LocalAddresses);
 
-        // Temporary implementation: First node becomes master (more complex search logic needed)
-        bool bHasLowerIP = false;
+            for (const TSharedPtr<FInternetAddr>& Addr : LocalAddresses)
+            {
+                if (Addr.IsValid())
+                {
+                    FString CandidateIP = Addr->ToString(false);
+                    // 루프백이나 링크 로컬 주소가 아닌 것을 선택
+                    if (!CandidateIP.StartsWith(TEXT("127.")) && !CandidateIP.StartsWith(TEXT("169.254.")))
+                    {
+                        LocalIP = CandidateIP;
+                        bFoundValidIP = true;
+                        UE_LOG(LogTimecodeNetwork, Log, TEXT("Local IP detected (from adapters): %s"), *LocalIP);
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
-        // Implement search logic here
-        // ...
+    if (bFoundValidIP)
+    {
+        // 테스트 환경을 위한 단순한 규칙:
+        // 포트 번호가 10000이면 마스터, 그 외에는 슬레이브
+        bool bIsMaster = (PortNumber == 10000);
 
-        // Master if no node with lower IP
-        bool bIsMaster = !bHasLowerIP;
-
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Auto-detected role: %s"), bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Auto-detected role based on port number: %s (Port: %d)"),
+            bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"), PortNumber);
 
         return bIsMaster;
     }
 
-    // Default to SLAVE if IP cannot be obtained
+    // IP를 얻지 못한 경우 슬레이브로 설정
     UE_LOG(LogTimecodeNetwork, Warning, TEXT("Could not determine local IP address, defaulting to SLAVE"));
     return false;
 }
