@@ -125,6 +125,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "TimecodeSync|Tests")
     bool TestPacketLossHandling(float SimulatedPacketLossRate = 0.3f);
 
+    // 대상 포트 설정 함수
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetTargetPort(int32 Port);
+
+    // 대상 포트 가져오기 함수
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    int32 GetTargetPort() const;
+
 private:
     // UDP socket
     FSocket* Socket;
@@ -182,4 +190,7 @@ private:
 
     // Network state tracking
     bool bHasReceivedValidMessage = false;
+
+    // 대상 포트 번호
+    int32 TargetPortNumber;
 };

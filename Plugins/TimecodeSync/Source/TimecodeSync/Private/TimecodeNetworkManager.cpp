@@ -774,3 +774,14 @@ bool UTimecodeNetworkManager::TestPacketLossHandling(float SimulatedPacketLossRa
 
     return bTestPassed;
 }
+
+void UTimecodeNetworkManager::SetTargetPort(int32 Port)
+{
+    TargetPortNumber = Port;
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("Target port set to: %d"), TargetPortNumber);
+}
+
+int32 UTimecodeNetworkManager::GetTargetPort() const
+{
+    return TargetPortNumber;
+}
