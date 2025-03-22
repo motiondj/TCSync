@@ -20,27 +20,27 @@
 - ✅ Automation 탭 선택
 - ✅ "TimecodeSync" 검색
 - ✅ TimecodeSync.Utils.Conversion 테스트 실행
-  - ✅ 결과: PASSED / FAILED
+  - ✅ 결과: PASSED
 - ✅ TimecodeSync.Utils.DropFrame 테스트 실행
-  - ✅ 결과: PASSED / FAILED
+  - ✅ 결과: PASSED
 
 ## 3. 통합 테스트 실행
 
 ### 테스트 실행 준비
-- [ ] BP_TimecodeSyncTester에 RunIntegratedTest 설정
-- [ ] Output Log 창 열기 (Window → Developer Tools → Output Log)
+- ✅ BP_TimecodeSyncTester에 RunIntegratedTest 설정
+- ✅ Output Log 창 열기 (Window → Developer Tools → Output Log)
 
 ### 통합 테스트 실행 및 결과 확인
-- [ ] Play 버튼 클릭하여 테스트 실행
-- [ ] 테스트 결과 관찰:
-  - [ ] UDP Connection: PASSED / FAILED
-  - [ ] Message Serialization: PASSED / FAILED
-  - [ ] Packet Loss Handling: PASSED / FAILED
-  - [ ] Master/Slave Sync: PASSED / FAILED
-  - [ ] Multiple Frame Rates: PASSED / FAILED
-  - [ ] System Time Sync: PASSED / FAILED
-  - [ ] Auto Role Detection: PASSED / FAILED
-- [ ] 최종 통과율: ____%
+- ✅ Play 버튼 클릭하여 테스트 실행
+- ✅ 테스트 결과 관찰:
+  - ✅ UDP Connection: PASSED
+  - ✅ Message Serialization: FAILED
+  - ✅ Packet Loss Handling: FAILED
+  - ✅ Master/Slave Sync: FAILED
+  - ✅ Multiple Frame Rates: FAILED
+  - ✅ System Time Sync: FAILED
+  - ✅ Auto Role Detection: FAILED
+- ✅ 최종 통과율: 14.3% (1/7 통과)
 
 ## 4. 개별 테스트 실행 (실패한 테스트에 대해)
 
