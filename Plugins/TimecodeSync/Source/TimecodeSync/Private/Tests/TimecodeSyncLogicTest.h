@@ -37,6 +37,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     bool TestFrameRateConversion();
 
+    // PLL 동기화 테스트
+    UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
+    bool TestPLLSynchronization(float Duration = 5.0f);
+
 private:
     // Timecode message reception handler (Master)
     UFUNCTION()

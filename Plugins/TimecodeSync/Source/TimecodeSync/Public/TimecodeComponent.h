@@ -87,6 +87,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (ClampMin = "0.001", ClampMax = "1.0"))
     float SyncInterval;
 
+    /** PLL Settings */
+
+    // PLL 사용 여부
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Sync", meta = (DisplayName = "Use PLL"))
+    bool bUsePLL;
+
+    // PLL 대역폭 (반응성 조절)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Sync", meta = (EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.01", ClampMax = "1.0"))
+    float PLLBandwidth;
+
+    // PLL 감쇠 계수
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Sync", meta = (EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.1", ClampMax = "2.0"))
+    float PLLDamping;
+
     /** Status and Statistics (Read-only) */
 
     // Current timecode (read-only)
@@ -229,6 +243,23 @@ public:
     // Log detailed debug information about the timecode component
     UFUNCTION(BlueprintCallable, Category = "Timecode|Debug")
     void LogDebugInfo();
+
+    // PLL 설정 메서드
+    UFUNCTION(BlueprintCallable, Category = "Timecode Sync")
+    void SetUsePLL(bool bInUsePLL);
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Sync")
+    bool GetUsePLL() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Sync")
+    void SetPLLParameters(float Bandwidth, float Damping);
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Sync")
+    void GetPLLParameters(float& OutBandwidth, float& OutDamping) const;
+
+    // PLL 상태 조회
+    UFUNCTION(BlueprintCallable, Category = "Timecode Sync")
+    void GetPLLStatus(float& OutFrequency, float& OutOffset) const;
 
 private:
     // Elapsed time in seconds

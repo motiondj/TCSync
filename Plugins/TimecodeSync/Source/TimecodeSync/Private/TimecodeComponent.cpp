@@ -45,6 +45,11 @@ UTimecodeComponent::UTimecodeComponent()
     SyncInterval = Settings ? Settings->BroadcastInterval : 0.033f; // Approximately 30Hz
     TargetPortNumber = Settings ? (Settings->DefaultUDPPort + 1) : 10001; // 기본값은 UDPPort + 1
 
+    // PLL 설정 초기화
+    bUsePLL = true;                // PLL 기본적으로 활성화
+    PLLBandwidth = 0.1f;           // 기본 대역폭
+    PLLDamping = 1.0f;             // 기본 감쇠 계수
+
     // Initialize internal variables
     bIsRunning = false;
     ElapsedTimeSeconds = 0.0f;
@@ -245,6 +250,10 @@ bool UTimecodeComponent::SetupNetwork()
                 NetworkManager->SetMasterIPAddress(MasterIPAddress);
             }
         }
+
+        // Apply PLL settings
+        NetworkManager->SetUsePLL(bUsePLL);
+        NetworkManager->SetPLLParameters(PLLBandwidth, PLLDamping);
 
         // Setup callbacks
         NetworkManager->OnMessageReceived.AddDynamic(this, &UTimecodeComponent::OnTimecodeMessageReceived);
@@ -565,6 +574,17 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
                 // Convert timecode string to seconds
                 ElapsedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
 
+                // Apply any PLL correction to local time
+                if (bUsePLL && NetworkManager)
+                {
+                    // 실시간 PLL 상태 로깅 (상세 디버그용)
+                    double Phase, Frequency, Offset;
+                    NetworkManager->GetPLLStatus(Phase, Frequency, Offset);
+
+                    UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] PLL Correction - Freq: %.6f, Offset: %.3fms"),
+                        *GetOwner()->GetName(), Frequency, Offset * 1000.0);
+                }
+
                 // Trigger timecode change event
                 OnTimecodeChanged.Broadcast(CurrentTimecode);
 
@@ -719,4 +739,80 @@ void UTimecodeComponent::LogDebugInfo()
     }
 
     UE_LOG(LogTimecodeComponent, Display, TEXT("========================================="));
+
+    // PLL 정보 추가
+    UE_LOG(LogTimecodeComponent, Display, TEXT("PLL Enabled: %s"), bUsePLL ? TEXT("Yes") : TEXT("No"));
+    UE_LOG(LogTimecodeComponent, Display, TEXT("PLL Bandwidth: %.3f, Damping: %.3f"), PLLBandwidth, PLLDamping);
+
+    if (NetworkManager && bUsePLL)
+    {
+        double Phase, Frequency, Offset;
+        NetworkManager->GetPLLStatus(Phase, Frequency, Offset);
+
+        UE_LOG(LogTimecodeComponent, Display, TEXT("PLL Status - Frequency: %.6f, Offset: %.3fms"),
+            Frequency, Offset * 1000.0);
+    }
+
+    UE_LOG(LogTimecodeComponent, Display, TEXT("========================================="));
+}
+
+// TimecodeComponent.cpp 파일 끝에 추가
+
+void UTimecodeComponent::SetUsePLL(bool bInUsePLL)
+{
+    if (bUsePLL != bInUsePLL)
+    {
+        bUsePLL = bInUsePLL;
+
+        if (NetworkManager)
+        {
+            NetworkManager->SetUsePLL(bUsePLL);
+        }
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL %s"),
+            *GetOwner()->GetName(), bUsePLL ? TEXT("enabled") : TEXT("disabled"));
+    }
+}
+
+bool UTimecodeComponent::GetUsePLL() const
+{
+    return bUsePLL;
+}
+
+void UTimecodeComponent::SetPLLParameters(float Bandwidth, float Damping)
+{
+    // 유효 범위 클램핑
+    PLLBandwidth = FMath::Clamp(Bandwidth, 0.01f, 1.0f);
+    PLLDamping = FMath::Clamp(Damping, 0.1f, 2.0f);
+
+    if (NetworkManager)
+    {
+        NetworkManager->SetPLLParameters(PLLBandwidth, PLLDamping);
+    }
+
+    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL parameters set - Bandwidth: %.3f, Damping: %.3f"),
+        *GetOwner()->GetName(), PLLBandwidth, PLLDamping);
+}
+
+void UTimecodeComponent::GetPLLParameters(float& OutBandwidth, float& OutDamping) const
+{
+    OutBandwidth = PLLBandwidth;
+    OutDamping = PLLDamping;
+}
+
+void UTimecodeComponent::GetPLLStatus(float& OutFrequency, float& OutOffset) const
+{
+    if (NetworkManager)
+    {
+        double Phase, Frequency, Offset;
+        NetworkManager->GetPLLStatus(Phase, Frequency, Offset);
+
+        OutFrequency = (float)Frequency;
+        OutOffset = (float)Offset;
+    }
+    else
+    {
+        OutFrequency = 1.0f;
+        OutOffset = 0.0f;
+    }
 }

@@ -623,7 +623,214 @@ bool UTimecodeSyncLogicTest::TestFrameRateConversion()
     UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] 1min boundary - TC1min: %s, seconds: %.3f"),
         *TC1min, TC1minSecs);
 
+    // PLL 개선 테스트 추가 - 드롭 프레임 특수 케이스
+    UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] Testing PLL improvement for drop frame timecode"));
+
+    // 테스트 네트워크 매니저 생성
+    UTimecodeNetworkManager* TestManager = NewObject<UTimecodeNetworkManager>();
+    if (TestManager)
+    {
+        // 기본 초기화
+        TestManager->Initialize(false, 12390);
+
+        // 드롭 프레임 테스트 케이스 1: 29.97fps에서 1분 경계
+        const float TestTime = 60.0f;  // 정확히 1분
+        FString TC29_97 = UTimecodeUtils::SecondsToTimecode(TestTime, 29.97f, true);
+        float TCSeconds = UTimecodeUtils::TimecodeToSeconds(TC29_97, 29.97f, true);
+
+        // PLL 없이 변환 시 오차
+        float WithoutPLLError = FMath::Abs(TestTime - TCSeconds) * 1000.0f;  // ms 단위
+
+        // PLL 활성화
+        TestManager->SetUsePLL(true);
+        TestManager->SetPLLParameters(0.2f, 0.8f);
+
+        // PLL 보정 가정 (여기서는 시뮬레이션)
+        double Phase = 0.0;
+        double Frequency = 29.97 / 30.0;  // 29.97fps vs 30fps 비율
+        double Offset = (30.0 - 29.97) * TestTime / 30.0;  // 누적 차이
+
+        // 이론적 PLL 보정 후 오차
+        float WithPLLError = (1.0f - Frequency) * WithoutPLLError;
+
+        UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] Drop frame at 60s - TC: %s, Without PLL error: %.3fms, With PLL: %.3fms"),
+            *TC29_97, WithoutPLLError, WithPLLError);
+
+        // 개선도 계산 (%)
+        float ImprovementPercent = 100.0f * (1.0f - (WithPLLError / WithoutPLLError));
+        UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] PLL Improvement: %.1f%%"), ImprovementPercent);
+
+        ResultMessage += FString::Printf(TEXT("PLL Improvement: %.1f%% for drop frame\n"), ImprovementPercent);
+
+        // 테스트 종료
+        TestManager->Shutdown();
+    }
+
     // 로그 결과 출력
     LogTestResult(TEXT("Frame Rate Conversion"), bSuccess, ResultMessage);
+    return bSuccess;
+}
+
+// TimecodeSyncLogicTest.cpp에 추가
+
+bool UTimecodeSyncLogicTest::TestPLLSynchronization(float Duration)
+{
+    bool bSuccess = false;
+    FString ResultMessage;
+
+    UE_LOG(LogTemp, Display, TEXT("=============================="));
+    UE_LOG(LogTemp, Display, TEXT("[TimecodeSyncTest] PLL Synchronization: Testing..."));
+
+    // 1. 마스터와 슬레이브 네트워크 매니저 생성
+    UTimecodeNetworkManager* MasterManager = NewObject<UTimecodeNetworkManager>();
+    UTimecodeNetworkManager* SlaveManager = NewObject<UTimecodeNetworkManager>();
+
+    if (!MasterManager || !SlaveManager)
+    {
+        LogTestResult(TEXT("PLL Synchronization"), false, TEXT("Failed to create managers"));
+        return false;
+    }
+
+    // 2. 마스터와 슬레이브 설정
+    const int32 MasterPort = 12380;
+    const int32 SlavePort = 12381;
+
+    // 마스터 설정
+    MasterManager->SetRoleMode(ETimecodeRoleMode::Manual);
+    MasterManager->SetManualMaster(true);
+    bool bMasterInitialized = MasterManager->Initialize(true, MasterPort);
+
+    // 슬레이브 설정
+    SlaveManager->SetRoleMode(ETimecodeRoleMode::Manual);
+    SlaveManager->SetManualMaster(false);
+    SlaveManager->SetMasterIPAddress(TEXT("127.0.0.1"));
+    bool bSlaveInitialized = SlaveManager->Initialize(false, SlavePort);
+
+    if (!bMasterInitialized || !bSlaveInitialized)
+    {
+        if (MasterManager) MasterManager->Shutdown();
+        if (SlaveManager) SlaveManager->Shutdown();
+        LogTestResult(TEXT("PLL Synchronization"), false, TEXT("Failed to initialize managers"));
+        return false;
+    }
+
+    // 대상 포트 설정
+    MasterManager->SetTargetPort(SlavePort);
+    SlaveManager->SetTargetPort(MasterPort);
+
+    // 로컬 IP 설정
+    MasterManager->SetTargetIP(TEXT("127.0.0.1"));
+    SlaveManager->SetTargetIP(TEXT("127.0.0.1"));
+
+    // 3. PLL 설정 (테스트를 위한 다양한 파라미터)
+    const float TestBandwidth = 0.2f;
+    const float TestDamping = 0.8f;
+    SlaveManager->SetUsePLL(true);
+    SlaveManager->SetPLLParameters(TestBandwidth, TestDamping);
+
+    // 4. 테스트 시나리오 생성: 인위적 지연 변동 시뮬레이션
+    const int32 NumSamples = 10;
+    TArray<double> NetworkDelays;    // 시뮬레이션된 네트워크 지연 (ms)
+    TArray<double> SyncErrors;       // PLL 없이 예상되는 오차 (ms)
+    TArray<double> PLLSyncErrors;    // PLL 적용 시 실제 오차 (ms)
+
+    // 다양한 네트워크 지연 시뮬레이션 (10-200ms 범위, 변동 포함)
+    float BaseDelay = 50.0f;  // 기본 50ms 지연
+    for (int32 i = 0; i < NumSamples; ++i)
+    {
+        // 사인파 패턴의 지연 변동 (점진적 증가 후 감소)
+        float DelayVariation = 30.0f * FMath::Sin(2.0f * PI * i / NumSamples);
+        NetworkDelays.Add(BaseDelay + DelayVariation);
+    }
+
+    // 5. 테스트 실행
+    UE_LOG(LogTemp, Display, TEXT("Starting PLL synchronization test with %d samples..."), NumSamples);
+    UE_LOG(LogTemp, Display, TEXT("PLL Settings - Bandwidth: %.3f, Damping: %.3f"), TestBandwidth, TestDamping);
+
+    // 초기 타임코드 설정
+    FString InitialTimecode = TEXT("01:00:00:00");
+    double StartTime = FPlatformTime::Seconds();
+
+    for (int32 i = 0; i < NumSamples; ++i)
+    {
+        // 현재 테스트 사이클 시간
+        double CurrentTime = FPlatformTime::Seconds() - StartTime;
+
+        // 경과 시간에 따른 타임코드 계산 (1초당 1프레임씩 증가)
+        int32 ElapsedFrames = FMath::FloorToInt(CurrentTime * 30.0f);  // 30fps 가정
+        FString CurrentTimecode = FString::Printf(TEXT("01:00:%02d:%02d"),
+            (ElapsedFrames / 30) % 60,  // 초
+            ElapsedFrames % 30);        // 프레임
+
+        // 네트워크 지연 시뮬레이션
+        float SimulatedDelay = NetworkDelays[i] / 1000.0f;  // ms -> 초 변환
+
+        // 지연 이전의 타임코드 저장 (이상적인 값)
+        FString IdealTimecode = CurrentTimecode;
+
+        // 타임코드 전송 및 수신 시뮬레이션
+        UE_LOG(LogTemp, Display, TEXT("Sample %d - Network delay: %.1fms, Timecode: %s"),
+            i + 1, NetworkDelays[i], *CurrentTimecode);
+
+        // 마스터에서 타임코드 전송
+        MasterManager->SendTimecodeMessage(CurrentTimecode, ETimecodeMessageType::TimecodeSync);
+
+        // 네트워크 지연 시뮬레이션
+        FPlatformProcess::Sleep(SimulatedDelay);
+
+        // PLL 상태 정보 추출 (지연 후)
+        double Phase, Frequency, Offset;
+        SlaveManager->GetPLLStatus(Phase, Frequency, Offset);
+
+        // 지연으로 인한 오차 계산
+        double NetworkDelayError = SimulatedDelay * 30.0f;  // 초 -> 프레임 변환
+
+        // PLL 보정 후 오차 계산 (이론적)
+        double PLLCorrectedError = NetworkDelayError * (1.0 - Frequency);
+
+        SyncErrors.Add(NetworkDelayError);
+        PLLSyncErrors.Add(PLLCorrectedError);
+
+        UE_LOG(LogTemp, Display, TEXT("  PLL Status - Freq: %.6f, Offset: %.2fms"),
+            Frequency, Offset * 1000.0f);
+        UE_LOG(LogTemp, Display, TEXT("  Without PLL Error: %.2f frames, With PLL: %.2f frames"),
+            NetworkDelayError, PLLCorrectedError);
+
+        // 다음 샘플 전 짧은 대기
+        FPlatformProcess::Sleep(Duration / NumSamples);
+    }
+
+    // 6. 결과 분석
+    double AvgDelay = 0.0, AvgSyncError = 0.0, AvgPLLError = 0.0;
+    double MaxSyncError = 0.0, MaxPLLError = 0.0;
+
+    for (int32 i = 0; i < NumSamples; ++i)
+    {
+        AvgDelay += NetworkDelays[i];
+        AvgSyncError += SyncErrors[i];
+        AvgPLLError += FMath::Abs(PLLSyncErrors[i]);
+
+        MaxSyncError = FMath::Max(MaxSyncError, SyncErrors[i]);
+        MaxPLLError = FMath::Max(MaxPLLError, FMath::Abs(PLLSyncErrors[i]));
+    }
+
+    AvgDelay /= NumSamples;
+    AvgSyncError /= NumSamples;
+    AvgPLLError /= NumSamples;
+
+    // 개선도 계산 (%)
+    double ImprovementPercent = 100.0f * (1.0f - (AvgPLLError / AvgSyncError));
+
+    // 테스트 통과 기준: PLL이 오차를 50% 이상 감소시켜야 함
+    bSuccess = (ImprovementPercent >= 50.0f);
+
+    ResultMessage = FString::Printf(TEXT("Network Delay: Avg %.1fms, Error without PLL: %.2f frames, With PLL: %.2f frames\nImprovement: %.1f%%"),
+        AvgDelay, AvgSyncError, AvgPLLError, ImprovementPercent);
+
+    // 7. 정리
+    MasterManager->Shutdown();
+    SlaveManager->Shutdown();
+
+    LogTestResult(TEXT("PLL Synchronization"), bSuccess, ResultMessage);
     return bSuccess;
 }

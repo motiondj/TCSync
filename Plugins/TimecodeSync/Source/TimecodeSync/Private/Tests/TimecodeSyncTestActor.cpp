@@ -114,6 +114,24 @@ void ATimecodeSyncTestActor::RunSelectedTest()
         }
         break;
     }
+    case 6: // PLL 동기화 테스트
+    {
+        UTimecodeSyncLogicTest* TestInstance = NewObject<UTimecodeSyncLogicTest>();
+        if (TestInstance)
+        {
+            bool Result = TestInstance->TestPLLSynchronization(SyncDuration);
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f,
+                    Result ? FColor::Green : FColor::Red,
+                    FString::Printf(TEXT("PLL Synchronization Test: %s"),
+                        Result ? TEXT("PASSED") : TEXT("FAILED")));
+            }
+        }
+        break;
+    }
+
     default:
         UE_LOG(LogTemp, Warning, TEXT("Invalid test type selected: %d"), TestType);
         break;
@@ -297,4 +315,12 @@ void ATimecodeSyncTestActor::RunIntegratedTest()
 
     TestResults.Add(FString::Printf(TEXT("Frame Rate Conversion: %s"),
         FrameRateConversionResult ? TEXT("PASSED") : TEXT("FAILED")));
+
+    // PLL 동기화 테스트 추가
+    TotalTests++;
+    bool PLLSyncResult = LogicTest->TestPLLSynchronization(2.0f);
+    if (PLLSyncResult) PassedTests++;
+
+    TestResults.Add(FString::Printf(TEXT("PLL Synchronization: %s"),
+        PLLSyncResult ? TEXT("PASSED") : TEXT("FAILED")));
 }

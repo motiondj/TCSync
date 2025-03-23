@@ -82,6 +82,20 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Advanced", meta = (ClampMin = "0.1", ClampMax = "10.0"))
     float ConnectionCheckInterval;
 
+    /** PLL Settings */
+
+    // Enable PLL for timecode synchronization
+    UPROPERTY(config, EditAnywhere, Category = "Advanced")
+    bool bEnablePLL;
+
+    // PLL bandwidth (responsiveness)
+    UPROPERTY(config, EditAnywhere, Category = "Advanced", meta = (EditCondition = "bEnablePLL", ClampMin = "0.01", ClampMax = "1.0"))
+    float PLLBandwidth;
+
+    // PLL damping factor (stability)
+    UPROPERTY(config, EditAnywhere, Category = "Advanced", meta = (EditCondition = "bEnablePLL", ClampMin = "0.1", ClampMax = "2.0"))
+    float PLLDamping;
+
 public:
     // UDeveloperSettings interface
     virtual FName GetCategoryName() const override;

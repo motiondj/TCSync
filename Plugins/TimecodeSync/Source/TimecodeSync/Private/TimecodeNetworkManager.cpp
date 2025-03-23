@@ -26,6 +26,14 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , MasterIPAddress(TEXT(""))
     , bRoleAutomaticallyDetermined(true)
     , bHasReceivedValidMessage(false)
+    , bUsePLL(true)                // PLL 기본적으로 활성화
+    , PLLBandwidth(0.1f)          // 기본 대역폭 (반응성)
+    , PLLDamping(1.0f)            // 기본 감쇠 계수 (안정성)
+    , PLLPhase(0.0)               // 초기 위상 차이
+    , PLLFrequency(1.0)           // 초기 주파수 비율
+    , PLLOffset(0.0)              // 초기 오프셋
+    , LastMasterTimestamp(0.0)    // 마지막 마스터 타임스탬프
+    , LastLocalTimestamp(0.0)     // 마지막 로컬 타임스탬프
 {
     // Basic initialization complete
     UE_LOG(LogTimecodeNetwork, Verbose, TEXT("TimecodeNetworkManager created with ID: %s"), *InstanceID);
@@ -139,6 +147,8 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
     FTimecodeNetworkMessage Message;
     Message.MessageType = MessageType;
     Message.Timecode = Timecode;
+
+    // PLL 적용된 타임스탬프 사용 (마스터 모드일 때)
     Message.Timestamp = FPlatformTime::Seconds();
     Message.SenderID = InstanceID;
     Message.Data = TEXT(""); // Default data is empty string
@@ -514,6 +524,17 @@ void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Mess
     switch (Message.MessageType)
     {
         case ETimecodeMessageType::TimecodeSync:
+            // PLL 업데이트 (마스터 타임코드 수신 시)
+            if (!bIsMasterMode)
+            {
+                // 타임코드 메시지에서 시간 정보 추출
+                double MasterTime = Message.Timestamp;
+                double LocalTime = FPlatformTime::Seconds();
+
+                // PLL 업데이트
+                UpdatePLL(MasterTime, LocalTime);
+            }
+
             // 타임코드 메시지 브로드캐스트
             OnTimecodeMessageReceived.Broadcast(Message);
             bHasReceivedValidMessage = true;
@@ -787,4 +808,146 @@ void UTimecodeNetworkManager::SetTargetPort(int32 Port)
 int32 UTimecodeNetworkManager::GetTargetPort() const
 {
     return TargetPortNumber;
+}
+
+void UTimecodeNetworkManager::SetUsePLL(bool bInUsePLL)
+{
+    bUsePLL = bInUsePLL;
+
+    if (bUsePLL)
+    {
+        // PLL 다시 초기화
+        InitializePLL();
+    }
+
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("PLL %s"), bUsePLL ? TEXT("enabled") : TEXT("disabled"));
+}
+
+void UTimecodeNetworkManager::SetPLLParameters(float Bandwidth, float Damping)
+{
+    // 유효 범위 클램핑
+    PLLBandwidth = FMath::Clamp(Bandwidth, 0.01f, 1.0f);
+    PLLDamping = FMath::Clamp(Damping, 0.1f, 2.0f);
+
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("PLL parameters set - Bandwidth: %.3f, Damping: %.3f"),
+        PLLBandwidth, PLLDamping);
+}
+
+bool UTimecodeNetworkManager::GetUsePLL() const
+{
+    return bUsePLL;
+}
+
+void UTimecodeNetworkManager::GetPLLParameters(float& OutBandwidth, float& OutDamping) const
+{
+    OutBandwidth = PLLBandwidth;
+    OutDamping = PLLDamping;
+}
+
+void UTimecodeNetworkManager::GetPLLStatus(double& OutPhase, double& OutFrequency, double& OutOffset) const
+{
+    OutPhase = PLLPhase;
+    OutFrequency = PLLFrequency;
+    OutOffset = PLLOffset;
+}
+
+void UTimecodeNetworkManager::InitializePLL()
+{
+    // PLL 상태 초기화
+    PLLPhase = 0.0;
+    PLLFrequency = 1.0;  // 주파수 비율 (1.0 = 동일)
+    PLLOffset = 0.0;
+
+    LastMasterTimestamp = 0.0;
+    LastLocalTimestamp = 0.0;
+
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("PLL initialized"));
+}
+
+// PLL 핵심 알고리즘: 마스터와 로컬 시간 차이를 기반으로 PLL 상태 업데이트
+void UTimecodeNetworkManager::UpdatePLL(double MasterTime, double LocalTime)
+{
+    if (!bUsePLL || bIsMasterMode)
+    {
+        // 마스터 모드거나 PLL이 비활성화된 경우 업데이트하지 않음
+        return;
+    }
+
+    // 첫 수신 시 초기화
+    if (LastMasterTimestamp == 0.0)
+    {
+        LastMasterTimestamp = MasterTime;
+        LastLocalTimestamp = LocalTime;
+        PLLOffset = MasterTime - LocalTime;
+        return;
+    }
+
+    // 시간 진행 확인 (역방향 점프 방지)
+    if (MasterTime <= LastMasterTimestamp || LocalTime <= LastLocalTimestamp)
+    {
+        UE_LOG(LogTimecodeNetwork, Warning,
+            TEXT("Time discontinuity detected - Master: %.3f->%.3f, Local: %.3f->%.3f"),
+            LastMasterTimestamp, MasterTime, LastLocalTimestamp, LocalTime);
+
+        // 시간이 역방향으로 점프한 경우 새로운 기준점으로 재설정
+        LastMasterTimestamp = MasterTime;
+        LastLocalTimestamp = LocalTime;
+        return;
+    }
+
+    // 시간 간격
+    double DeltaMaster = MasterTime - LastMasterTimestamp;
+    double DeltaLocal = LocalTime - LastLocalTimestamp;
+
+    // 주파수 비율 (얼마나 빠르게 진행되는지)
+    double ObservedFrequency = DeltaMaster / DeltaLocal;
+
+    // 예측된 마스터 시간
+    double PredictedMaster = LastMasterTimestamp + (DeltaLocal * PLLFrequency);
+
+    // 위상 오차 (예측 대비 실제 차이)
+    double PhaseError = MasterTime - PredictedMaster;
+
+    // PLL 계산을 위한 상수 (대역폭과 감쇠를 기반으로)
+    double OmegaN = PLLBandwidth * 2.0 * PI;  // 자연 주파수
+    double K1 = 2.0 * PLLDamping * OmegaN;    // 위상 보정 계수
+    double K2 = OmegaN * OmegaN;              // 주파수 보정 계수
+
+    // PLL 상태 업데이트
+    PLLPhase += PhaseError * K1 * DeltaLocal;
+    PLLFrequency += PhaseError * K2 * DeltaLocal;
+
+    // 오프셋 업데이트
+    PLLOffset = PLLPhase;
+
+    // 유효성 검사 (발산 방지)
+    if (FMath::Abs(PLLFrequency - 1.0) > 0.1)
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("PLL frequency correction limited: %.4f"), PLLFrequency);
+        PLLFrequency = FMath::Clamp(PLLFrequency, 0.9, 1.1);
+    }
+
+    // 현재 상태 저장
+    LastMasterTimestamp = MasterTime;
+    LastLocalTimestamp = LocalTime;
+
+    UE_LOG(LogTimecodeNetwork, Verbose,
+        TEXT("PLL Update - Error: %.3fms, Freq: %.6f, Offset: %.3fms"),
+        PhaseError * 1000.0, PLLFrequency, PLLOffset * 1000.0);
+}
+
+// PLL로 보정된 시간 계산
+double UTimecodeNetworkManager::GetPLLCorrectedTime(double LocalTime) const
+{
+    if (!bUsePLL || bIsMasterMode)
+    {
+        // PLL이 비활성화되거나 마스터 모드면 원래 시간 사용
+        return LocalTime;
+    }
+
+    // PLL 적용된 시간 계산: 로컬 시간에 주파수 비율 적용하고 오프셋 더함
+    double ElapsedSinceLastUpdate = LocalTime - LastLocalTimestamp;
+    double CorrectedTime = LastMasterTimestamp + (ElapsedSinceLastUpdate * PLLFrequency);
+
+    return CorrectedTime;
 }

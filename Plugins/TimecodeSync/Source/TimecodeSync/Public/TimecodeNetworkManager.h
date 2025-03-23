@@ -133,6 +133,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Network")
     int32 GetTargetPort() const;
 
+    // PLL 설정 메서드
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetUsePLL(bool bInUsePLL);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetPLLParameters(float Bandwidth, float Damping);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool GetUsePLL() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void GetPLLParameters(float& OutBandwidth, float& OutDamping) const;
+
+    // PLL 상태 정보 메서드
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void GetPLLStatus(double& OutPhase, double& OutFrequency, double& OutOffset) const;
+
 private:
     // UDP socket
     FSocket* Socket;
@@ -193,4 +210,23 @@ private:
 
     // 대상 포트 번호
     int32 TargetPortNumber;
+
+    // PLL 설정
+    bool bUsePLL;
+    float PLLBandwidth;     // PLL 반응성 (0.01-1.0)
+    float PLLDamping;       // PLL 안정성 (0.1-2.0)
+
+    // PLL 상태 변수
+    double PLLPhase;        // 위상 (현재 상태)
+    double PLLFrequency;    // 주파수 (변화율)
+    double PLLOffset;       // 오프셋 (보정값)
+
+    // 마지막 수신 시간 추적
+    double LastMasterTimestamp;
+    double LastLocalTimestamp;
+
+    // 타임코드 보정 및 PLL 상태 업데이트
+    void UpdatePLL(double MasterTime, double LocalTime);
+    double GetPLLCorrectedTime(double LocalTime) const;
+    void InitializePLL();
 };
