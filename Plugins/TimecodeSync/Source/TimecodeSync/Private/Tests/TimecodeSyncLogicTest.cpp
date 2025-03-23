@@ -2,6 +2,7 @@
 #include "Tests/TimecodeSyncLogicTest.h"
 #include "TimecodeNetworkManager.h"
 #include "TimecodeNetworkTypes.h"
+#include "TimecodeUtils.h" 
 #include "Logging/LogMacros.h"
 
 UTimecodeSyncLogicTest::UTimecodeSyncLogicTest()
@@ -495,4 +496,134 @@ void UTimecodeSyncLogicTest::LogTestResult(const FString& TestName, bool bSucces
             FString::Printf(TEXT("[TimecodeSyncTest] %s: %s"), *TestName, *ResultStr));
         GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::White, Message);
     }
+}
+
+bool UTimecodeSyncLogicTest::TestFrameRateConversion()
+{
+    bool bSuccess = true;
+    FString ResultMessage;
+
+    // 1. 다양한 프레임 레이트에서의 타임코드 변환 테스트
+    struct FFrameRateTestCase
+    {
+        float SourceFrameRate;
+        bool bSourceDropFrame;
+        float TargetFrameRate;
+        bool bTargetDropFrame;
+        FString Description;
+    };
+
+    TArray<FFrameRateTestCase> TestCases;
+
+    // 일반 프레임 레이트 간 변환 테스트
+    TestCases.Add({ 24.0f, false, 30.0f, false, TEXT("24fps to 30fps") });
+    TestCases.Add({ 25.0f, false, 30.0f, false, TEXT("25fps to 30fps") });
+    TestCases.Add({ 30.0f, false, 60.0f, false, TEXT("30fps to 60fps") });
+    TestCases.Add({ 60.0f, false, 30.0f, false, TEXT("60fps to 30fps") });
+
+    // 드롭 프레임 관련 테스트
+    TestCases.Add({ 30.0f, false, 29.97f, true, TEXT("30fps to 29.97fps drop") });
+    TestCases.Add({ 29.97f, true, 30.0f, false, TEXT("29.97fps drop to 30fps") });
+    TestCases.Add({ 60.0f, false, 59.94f, true, TEXT("60fps to 59.94fps drop") });
+    TestCases.Add({ 59.94f, true, 60.0f, false, TEXT("59.94fps drop to 60fps") });
+
+    // 대표적인 시간값들 (초 단위)
+    float TestTimes[] = { 1.0f, 10.5f, 59.9f, 60.0f, 300.5f, 3600.0f, 3661.5f };
+
+    for (const FFrameRateTestCase& TestCase : TestCases)
+    {
+        UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] Testing conversion: %s"), *TestCase.Description);
+
+        int32 PassedCount = 0;
+        int32 TotalCount = 0;
+
+        for (float OriginalTime : TestTimes)
+        {
+            TotalCount++;
+
+            // 소스 프레임 레이트로 타임코드 생성
+            FString SourceTimecode = UTimecodeUtils::SecondsToTimecode(
+                OriginalTime,
+                TestCase.SourceFrameRate,
+                TestCase.bSourceDropFrame);
+
+            // 타임코드를 초로 변환 (소스 프레임 레이트 사용)
+            float IntermediateSeconds = UTimecodeUtils::TimecodeToSeconds(
+                SourceTimecode,
+                TestCase.SourceFrameRate,
+                TestCase.bSourceDropFrame);
+
+            // 타겟 프레임 레이트로 타임코드 변환
+            FString TargetTimecode = UTimecodeUtils::SecondsToTimecode(
+                IntermediateSeconds,
+                TestCase.TargetFrameRate,
+                TestCase.bTargetDropFrame);
+
+            // 변환된 타임코드를 다시 초로 변환 (타겟 프레임 레이트 사용)
+            float FinalSeconds = UTimecodeUtils::TimecodeToSeconds(
+                TargetTimecode,
+                TestCase.TargetFrameRate,
+                TestCase.bTargetDropFrame);
+
+            // 프레임 레이트에 따른 허용 오차 계산
+            float MaxFrameDuration = FMath::Max(1.0f / TestCase.SourceFrameRate, 1.0f / TestCase.TargetFrameRate);
+            float Tolerance = MaxFrameDuration * 1.1f; // 10% 추가 여유
+
+            bool bTimeMatch = FMath::IsNearlyEqual(OriginalTime, FinalSeconds, Tolerance);
+
+            UE_LOG(LogTemp, Display, TEXT("  Time: %.2f, Source TC: %s, Target TC: %s, Final: %.2f, Match: %s"),
+                OriginalTime,
+                *SourceTimecode,
+                *TargetTimecode,
+                FinalSeconds,
+                bTimeMatch ? TEXT("YES") : TEXT("NO"));
+
+            if (bTimeMatch)
+            {
+                PassedCount++;
+            }
+        }
+
+        float SuccessRate = (float)PassedCount / TotalCount * 100.0f;
+        bool bCaseSuccess = (SuccessRate >= 95.0f); // 95% 이상 성공 시 테스트 통과로 간주
+
+        UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] %s: %d/%d passed (%.1f%%) - %s"),
+            *TestCase.Description,
+            PassedCount,
+            TotalCount,
+            SuccessRate,
+            bCaseSuccess ? TEXT("PASSED") : TEXT("FAILED"));
+
+        ResultMessage += FString::Printf(TEXT("%s: %d/%d (%.1f%%) - %s\n"),
+            *TestCase.Description,
+            PassedCount,
+            TotalCount,
+            SuccessRate,
+            bCaseSuccess ? TEXT("PASSED") : TEXT("FAILED"));
+
+        if (!bCaseSuccess)
+        {
+            bSuccess = false;
+        }
+    }
+
+    // 2. 특정 케이스에 대한 상세 테스트 (중요한 에지 케이스)
+
+    // 드롭 프레임 특수 케이스: 10분 단위 경계
+    FString TC10min = UTimecodeUtils::SecondsToTimecode(600.0f, 29.97f, true);
+    FString TC10min1 = UTimecodeUtils::SecondsToTimecode(600.03f, 29.97f, true);
+
+    UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] 10min boundary - TC10min: %s, TC10min+1frame: %s"),
+        *TC10min, *TC10min1);
+
+    // 드롭 프레임 특수 케이스: 1분 경계 (프레임 드롭 발생)
+    FString TC1min = UTimecodeUtils::SecondsToTimecode(60.0f, 29.97f, true);
+    float TC1minSecs = UTimecodeUtils::TimecodeToSeconds(TC1min, 29.97f, true);
+
+    UE_LOG(LogTemp, Display, TEXT("[FrameRateTest] 1min boundary - TC1min: %s, seconds: %.3f"),
+        *TC1min, TC1minSecs);
+
+    // 로그 결과 출력
+    LogTestResult(TEXT("Frame Rate Conversion"), bSuccess, ResultMessage);
+    return bSuccess;
 }

@@ -34,6 +34,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
     bool TestAutoRoleDetection();
 
+    UFUNCTION(BlueprintCallable, Category = "TimecodeSyncTest")
+    bool TestFrameRateConversion();
+
 private:
     // Timecode message reception handler (Master)
     UFUNCTION()

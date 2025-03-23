@@ -97,6 +97,23 @@ void ATimecodeSyncTestActor::RunSelectedTest()
         }
         break;
     }
+    case 5: // 프레임 레이트 변환 테스트
+    {
+        UTimecodeSyncLogicTest* TestInstance = NewObject<UTimecodeSyncLogicTest>();
+        if (TestInstance)
+        {
+            bool Result = TestInstance->TestFrameRateConversion();
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f,
+                    Result ? FColor::Green : FColor::Red,
+                    FString::Printf(TEXT("Frame Rate Conversion Test: %s"),
+                        Result ? TEXT("PASSED") : TEXT("FAILED")));
+            }
+        }
+        break;
+    }
     default:
         UE_LOG(LogTemp, Warning, TEXT("Invalid test type selected: %d"), TestType);
         break;
@@ -272,4 +289,12 @@ void ATimecodeSyncTestActor::RunIntegratedTest()
             MsgIdx++;
         }
     }
+
+    // 프레임 레이트 변환 테스트 (새로 추가)
+    TotalTests++;
+    bool FrameRateConversionResult = LogicTest->TestFrameRateConversion();
+    if (FrameRateConversionResult) PassedTests++;
+
+    TestResults.Add(FString::Printf(TEXT("Frame Rate Conversion: %s"),
+        FrameRateConversionResult ? TEXT("PASSED") : TEXT("FAILED")));
 }
