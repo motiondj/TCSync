@@ -43,6 +43,7 @@ UTimecodeComponent::UTimecodeComponent()
     TargetIP = TEXT("");
     MulticastGroup = Settings ? Settings->MulticastGroupAddress : TEXT("239.0.0.1");
     SyncInterval = Settings ? Settings->BroadcastInterval : 0.033f; // Approximately 30Hz
+    TargetPortNumber = Settings ? (Settings->DefaultUDPPort + 1) : 10001; // 기본값은 UDPPort + 1
 
     // Initialize internal variables
     bIsRunning = false;
@@ -253,11 +254,8 @@ bool UTimecodeComponent::SetupNetwork()
         // Initialize network
         bool bSuccess = NetworkManager->Initialize(bIsMaster, UDPPort);
 
-        // Set target IP
-        if (!TargetIP.IsEmpty())
-        {
-            NetworkManager->SetTargetIP(TargetIP);
-        }
+        // Set target port
+        NetworkManager->SetTargetPort(TargetPortNumber);
 
         // Join multicast group
         if (!MulticastGroup.IsEmpty())

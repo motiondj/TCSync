@@ -40,15 +40,15 @@ public:
     bool bIsMaster;
 
     // Master flag setting in manual mode
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditConditionHides, EditCondition = "RoleMode==0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual", EditConditionHides))
     bool bIsManuallyMaster;
 
     // Master IP setting (used in manual slave mode)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual && !bIsManuallyMaster"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual && !bIsManuallyMaster", EditConditionHides))
     FString MasterIPAddress;
 
     // Whether to use nDisplay (only in automatic mode)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Automatic"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Automatic", EditConditionHides))
     bool bUseNDisplay;
 
     /** Timecode Settings */
@@ -67,12 +67,16 @@ public:
 
     /** Network Settings */
 
-    // UDP port setting
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (ClampMin = "1024", ClampMax = "65535"))
+    // UDP port setting (for receiving messages)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (DisplayName = "Receive Port", ClampMin = "1024", ClampMax = "65535"))
     int32 UDPPort;
 
-    // Target IP setting (for unicast transmission in master mode)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network")
+    // UDP port for sending messages (target port)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (DisplayName = "Send Port", ClampMin = "1024", ClampMax = "65535"))
+    int32 TargetPortNumber;
+
+    // Target IP setting (for unicast transmission in master mode) - 현재 사용 안함
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (EditConditionHides, EditCondition = "false"))
     FString TargetIP;
 
     // Multicast group setting

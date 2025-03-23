@@ -143,7 +143,7 @@ float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate
 
     // Validate timecode format
     TArray<FString> TimeParts;
-    if (CleanTimecode.ParseIntoArray(TimeParts, TEXT(":;"), true) != 4)
+    if (CleanTimecode.Replace(TEXT(";"), TEXT(":")).ParseIntoArray(TimeParts, TEXT(":"), false) != 4)
     {
         UE_LOG(LogTemp, Warning, TEXT("Invalid timecode format: %s"), *CleanTimecode);
 
