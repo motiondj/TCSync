@@ -49,20 +49,24 @@
 ## PART B: 로컬 환경 추가 테스트 (진행 중)
 
 ### 1. 로컬 멀티 인스턴스 테스트
-- [ ] 새 레벨 생성
-- [ ] 두 개의 BP_TimecodeSyncTester 인스턴스 배치
-- [ ] 인스턴스 1 설정:
-  - [ ] Role Mode: Manual
-  - [ ] Is Manually Master: True
-- [ ] 인스턴스 2 설정:
-  - [ ] Role Mode: Manual
-  - [ ] Is Manually Master: False
-  - [ ] Master IP Address: "127.0.0.1"
-- [ ] 테스트 실행
-- [ ] 동기화 상태 확인:
-  - [ ] 인스턴스 1이 마스터 역할 수행
-  - [ ] 인스턴스 2가 슬레이브 역할 수행
-  - [ ] 타임코드 동기화 확인
+- [x] 새 레벨 생성
+- [x] 두 개의 BP_TimecodeSyncTester 인스턴스 배치
+- [x] 인스턴스 1 설정:
+  - [x] Role Mode: Manual
+  - [x] Is Manually Master: True
+  - [x] Receive Port(UDPPort): 10000
+  - [x] Send Port(TargetPortNumber): 10001
+- [x] 인스턴스 2 설정:
+  - [x] Role Mode: Manual
+  - [x] Is Manually Master: False
+  - [x] Master IP Address: "127.0.0.1"
+  - [x] Receive Port(UDPPort): 10001
+  - [x] Send Port(TargetPortNumber): 10000
+- [x] 테스트 실행
+- [x] 동기화 상태 확인:
+  - [x] 인스턴스 1이 마스터 역할 수행
+  - [x] 인스턴스 2가 슬레이브 역할 수행
+  - [x] 포트 설정 교차 확인 (로그 확인)
 
 ### 2. 프레임 레이트 변환 테스트
 - [ ] 24fps, 25fps, 30fps, 60fps 타임코드 변환 테스트
@@ -81,11 +85,19 @@
 - [ ] 자동 역할 모드에서 초기화 확인
 - [ ] 역할 할당 동작 확인
 
-## PART C: 코드 정리 및 개선 (예정)
+## PART C: 코드 정리 및 개선 (일부 완료)
 
 ### 1. 코드 리팩토링
+- [x] 타임코드 파싱 기능 개선
+  - [x] 타임코드 파싱 경고 메시지 수정
+  - [x] `TimecodeToSeconds` 함수의 구분자 처리 개선
+- [x] UI 개선
+  - [x] Role Mode가 Manual일 때만 Is Manually Master와 Master IPAddress 표시
+  - [x] Role Mode가 Automatic일 때만 Use nDisplay 표시
+  - [x] UDPPort → "Receive Port"로 UI 표시명 변경
+  - [x] TargetPortNumber → "Send Port"로 UI 표시명 변경
+  - [x] TargetIP는 고급 설정으로 이동(필수 설정에서 제외)
 - [ ] 마스터/슬레이브 동기화 코드 최적화
-- [ ] 포트 설정 관련 로직 개선
 - [ ] 중복 코드 제거
 
 ### 2. 코드 문서화
@@ -137,30 +149,63 @@
 - [ ] 사용자 피드백 수집 및 반영
 - [ ] 최종 버전 릴리스 준비
 
-## 수정 내역 요약
+## 주요 코드 수정 및 개선 사항
 
-### 1. 주요 수정 사항
-1. **TimecodeNetworkManager.cpp**의 `SendTimecodeMessage` 함수 수정:
-   - `PortNumber` 대신 `TargetPortNumber` 사용하도록 변경
-   - 세 곳에서 포트 설정 부분 수정:
-     - 마스터 IP로 전송하는 부분
-     - Target IP로 전송하는 부분
-     - Multicast로 전송하는 부분
+### 1. 타임코드 파싱 개선
+TimecodeUtils.cpp 파일의 TimecodeToSeconds 함수에서 타임코드 구분자 처리 개선:
+```cpp
+// 기존 코드
+if (CleanTimecode.ParseIntoArray(TimeParts, TEXT(":;"), true) != 4)
 
-2. **TimecodeSyncLogicTest.cpp**의 `TestMultipleFrameRates` 함수 수정:
-   - 대상 포트를 명시적으로 설정하는 코드 추가
-   - 마스터와 슬레이브 간 포트 구분
+// 수정 코드
+if (CleanTimecode.Replace(TEXT(";"), TEXT(":")).ParseIntoArray(TimeParts, TEXT(":"), false) != 4)
+```
+이 수정으로 "Invalid timecode format" 경고 메시지가 사라지고 타임코드 파싱이 더 안정적으로 작동합니다.
 
-3. **TimecodeSyncLogicTest.cpp**의 `TestSystemTimeSync` 함수 수정:
-   - 대상 포트를 명시적으로 설정하는 코드 추가
-   - 송신자와 수신자 간 포트 구분
+### 2. UI 개선
+TimecodeComponent.h 파일에서 속성 표시 개선:
+```cpp
+// Master flag setting in manual mode
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual", EditConditionHides))
+bool bIsManuallyMaster;
 
-### 2. nDisplay 통합 현황
-nDisplay와의 통합 기능이 이미 구현되어 있으며, `TimecodeComponent.cpp` 파일에 다음 기능이 포함됩니다:
+// Master IP setting (used in manual slave mode)
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual && !bIsManuallyMaster", EditConditionHides))
+FString MasterIPAddress;
 
-1. nDisplay 모듈 지원 여부 검사
-2. nDisplay 관련 설정 (bUseNDisplay)
-3. nDisplay 역할 확인 함수 (CheckNDisplayRole)
-4. 자동 역할 모드에서 nDisplay 역할 활용
+// Whether to use nDisplay (only in automatic mode)
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Automatic", EditConditionHides))
+bool bUseNDisplay;
 
-nDisplay 환경에서는 nDisplay 클러스터의 마스터 노드가 타임코드 마스터가 되고, 다른 슬레이브 노드들은 타임코드 슬레이브가 되도록 설계되어 있습니다.
+// UDP port setting (for receiving messages)
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (DisplayName = "Receive Port", ClampMin = "1024", ClampMax = "65535"))
+int32 UDPPort;
+
+// UDP port for sending messages (target port)
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (DisplayName = "Send Port", ClampMin = "1024", ClampMax = "65535"))
+int32 TargetPortNumber;
+
+// Target IP setting (for unicast transmission in master mode) - 고급 설정으로 이동
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (AdvancedDisplay))
+FString TargetIP;
+```
+이 수정으로 UI가 더 직관적이고 상황에 맞게 필요한 설정만 표시됩니다.
+
+### 3. 로컬 멀티 인스턴스 테스트 결과
+로컬 테스트 환경에서 두 인스턴스 간의 타임코드 동기화가 성공적으로 이루어졌습니다:
+- 마스터(10000 포트 수신, 10001 포트 송신)
+- 슬레이브(10001 포트 수신, 10000 포트 송신)
+- 각 인스턴스가 올바른 역할을 수행하고 네트워크 연결 상태가 "Connected"로 유지됨
+
+### 4. 향후 개선 사항
+1. 실제 네트워크 환경에서 자동 모드 테스트
+2. 다중 컴퓨터 환경에서 동일한 포트 설정(모든 인스턴스가 같은 수신/송신 포트 사용) 테스트
+3. nDisplay 통합 기능 강화 및 테스트
+4. 역할 자동 감지 알고리즘 개선
+
+## 참고 사항
+- 로컬 테스트와 실제 네트워크 환경 테스트는 포트 설정이 다릅니다:
+  - 로컬 테스트: 각 인스턴스가 서로 다른 수신 포트 사용(포트 충돌 방지)
+  - 실제 네트워크: 모든 인스턴스가 동일한 포트 설정 사용 가능(물리적으로 다른 머신)
+- 자동 모드는 실제 네트워크 환경이나 nDisplay 통합 시 더 유용합니다.
+- 패키징된 프로젝트에서는 수동 모드보다 자동 모드가 관리 측면에서 편리합니다.
