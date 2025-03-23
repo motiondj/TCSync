@@ -53,8 +53,8 @@ UTimecodeComponent::UTimecodeComponent()
     NetworkManager = nullptr;
     ConnectionState = ENetworkConnectionState::Disconnected;
 
-    // Initialize PLL settings
-    bUsePLL = true;  // 기본값으로 PLL 활성화
+    // PLL 설정 초기화
+    bUsePLL = true;
     PLLBandwidth = 0.1f;
     PLLDamping = 0.7f;
 }
@@ -84,9 +84,6 @@ void UTimecodeComponent::BeginPlay()
 
     // Setup network
     SetupNetwork();
-
-    // Initialize PLL settings after network setup
-    InitializePLLSettings();
 
     // Auto start setting
     if (bAutoStart)
@@ -129,31 +126,6 @@ void UTimecodeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
             {
                 SyncOverNetwork();
                 SyncTimer = 0.0f;
-            }
-        }
-    }
-}
-
-void UTimecodeComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
-{
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-
-    // 속성 이름 가져오기
-    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-
-    // PLL 관련 속성이 변경된 경우
-    if (PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeComponent, bUsePLL) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeComponent, PLLBandwidth) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(UTimecodeComponent, PLLDamping))
-    {
-        // 네트워크 매니저가 있으면 PLL 설정 업데이트
-        if (NetworkManager)
-        {
-            NetworkManager->SetUsePLL(bUsePLL);
-
-            if (bUsePLL)
-            {
-                NetworkManager->InitializePLL(PLLBandwidth, PLLDamping);
             }
         }
     }
@@ -298,6 +270,9 @@ bool UTimecodeComponent::SetupNetwork()
 
         // Update connection state
         ConnectionState = NetworkManager->GetConnectionState();
+
+        // PLL 초기화
+        InitializePLLSettings();
 
         UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network setup %s"),
             *GetOwner()->GetName(), bSuccess ? TEXT("successful") : TEXT("failed"));
@@ -469,95 +444,6 @@ bool UTimecodeComponent::GetIsMaster() const
     return bIsMaster;
 }
 
-// PLL 관련 메서드 구현
-void UTimecodeComponent::SetUsePLL(bool bEnable)
-{
-    if (bUsePLL != bEnable)
-    {
-        bUsePLL = bEnable;
-
-        // 네트워크 매니저에 설정 적용
-        if (NetworkManager)
-        {
-            NetworkManager->SetUsePLL(bEnable);
-
-            UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL %s"),
-                *GetOwner()->GetName(), bEnable ? TEXT("Enabled") : TEXT("Disabled"));
-        }
-    }
-}
-
-bool UTimecodeComponent::IsPLLLocked() const
-{
-    if (NetworkManager)
-    {
-        return NetworkManager->IsPLLLocked();
-    }
-    return false;
-}
-
-double UTimecodeComponent::GetPLLPhaseError() const
-{
-    if (NetworkManager)
-    {
-        return NetworkManager->GetPLLPhaseError();
-    }
-    return 0.0;
-}
-
-double UTimecodeComponent::GetPLLFrequencyRatio() const
-{
-    if (NetworkManager && NetworkManager->IsUsingPLL())
-    {
-        return NetworkManager->GetPLLFrequencyRatio();
-    }
-    return 1.0;
-}
-
-void UTimecodeComponent::SetPLLBandwidth(float Bandwidth)
-{
-    if (PLLBandwidth != Bandwidth)
-    {
-        PLLBandwidth = FMath::Clamp(Bandwidth, 0.01f, 1.0f);
-
-        if (NetworkManager && bUsePLL)
-        {
-            NetworkManager->InitializePLL(PLLBandwidth, PLLDamping);
-
-            UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL Bandwidth set to: %.3f"),
-                *GetOwner()->GetName(), PLLBandwidth);
-        }
-    }
-}
-
-void UTimecodeComponent::SetPLLDamping(float Damping)
-{
-    if (PLLDamping != Damping)
-    {
-        PLLDamping = FMath::Clamp(Damping, 0.1f, 2.0f);
-
-        if (NetworkManager && bUsePLL)
-        {
-            NetworkManager->InitializePLL(PLLBandwidth, PLLDamping);
-
-            UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL Damping set to: %.3f"),
-                *GetOwner()->GetName(), PLLDamping);
-        }
-    }
-}
-
-void UTimecodeComponent::InitializePLLSettings()
-{
-    if (NetworkManager)
-    {
-        NetworkManager->InitializePLL(PLLBandwidth, PLLDamping);
-        NetworkManager->SetUsePLL(bUsePLL);
-
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL initialized with Bandwidth=%.3f, Damping=%.3f, Enabled=%s"),
-            *GetOwner()->GetName(), PLLBandwidth, PLLDamping, bUsePLL ? TEXT("True") : TEXT("False"));
-    }
-}
-
 void UTimecodeComponent::UpdateTimecode(float DeltaTime)
 {
     // Update elapsed time
@@ -682,21 +568,21 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             // Process timecode sync message
             if (Message.Timecode != CurrentTimecode)
             {
-                // 이전 코드: 직접 타임코드 설정
-                // CurrentTimecode = Message.Timecode;
-                // ElapsedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
-
                 // PLL 사용 여부에 따른 타임코드 처리
                 if (bUsePLL && NetworkManager)
                 {
-                    // PLL 사용 시 - 네트워크 매니저의 보정된 시간 사용
+                    // 마스터 타임코드를 사용하여 PLL 업데이트
+                    double ReceiveTime = FPlatformTime::Seconds();
+                    NetworkManager->UpdatePLL(Message.Timecode, ReceiveTime);
+
+                    // PLL 보정된 시간 가져오기
                     double CorrectedTime = NetworkManager->GetPLLCorrectedTime();
                     CurrentTimecode = UTimecodeUtils::SecondsToTimecode(CorrectedTime, FrameRate, bUseDropFrameTimecode);
                     ElapsedTimeSeconds = CorrectedTime;
                 }
                 else
                 {
-                    // PLL 미사용 시 - 기존 방식대로 직접 처리
+                    // 기존 방식대로 처리
                     CurrentTimecode = Message.Timecode;
                     ElapsedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
                 }

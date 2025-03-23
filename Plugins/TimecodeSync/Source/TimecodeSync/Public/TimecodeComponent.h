@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "TimecodeNetworkManager.h"
 #include "TimecodeNetworkTypes.h"
+#include "TimecodePLL.h"  // 추가됨
 #include "TimecodeComponent.generated.h"
 
 // Delegate declaration for timecode change event
@@ -89,16 +90,16 @@ public:
 
     /** PLL Settings */
 
-    // Whether to use PLL for timecode synchronization
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PLL Synchronization", meta = (AdvancedDisplay))
+    // PLL 사용 여부 설정
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode|PLL", meta = (AdvancedDisplay))
     bool bUsePLL;
 
-    // PLL bandwidth parameter (controls reaction speed)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PLL Synchronization", meta = (AdvancedDisplay, EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.01", ClampMax = "1.0"))
+    // PLL 대역폭 설정 (반응성 조절)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode|PLL", meta = (AdvancedDisplay, EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.01", ClampMax = "1.0"))
     float PLLBandwidth;
 
-    // PLL damping parameter (controls stability)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PLL Synchronization", meta = (AdvancedDisplay, EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.1", ClampMax = "2.0"))
+    // PLL 감쇠 계수 설정
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode|PLL", meta = (AdvancedDisplay, EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.1", ClampMax = "2.0"))
     float PLLDamping;
 
     /** Status and Statistics (Read-only) */
@@ -146,9 +147,6 @@ protected:
 
     // Called every frame
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-
-    // Called when property is changed in editor
-    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 
 public:
     /** Timecode Control Functions */
@@ -245,28 +243,28 @@ public:
 
     /** PLL Functions */
 
-    // Enable or disable PLL
-    UFUNCTION(BlueprintCallable, Category = "PLL Synchronization")
+    // PLL 사용 설정
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     void SetUsePLL(bool bEnable);
 
-    // Check if PLL is locked (stable synchronization)
-    UFUNCTION(BlueprintPure, Category = "PLL Synchronization")
+    // PLL 잠금 상태 확인
+    UFUNCTION(BlueprintPure, Category = "Timecode|PLL")
     bool IsPLLLocked() const;
 
-    // Get current PLL phase error (for debugging)
-    UFUNCTION(BlueprintPure, Category = "PLL Synchronization")
+    // PLL 위상 오차 확인
+    UFUNCTION(BlueprintPure, Category = "Timecode|PLL")
     double GetPLLPhaseError() const;
 
-    // Get current PLL frequency ratio (for debugging)
-    UFUNCTION(BlueprintPure, Category = "PLL Synchronization")
+    // PLL 주파수 비율 확인
+    UFUNCTION(BlueprintPure, Category = "Timecode|PLL")
     double GetPLLFrequencyRatio() const;
 
-    // Set PLL bandwidth parameter
-    UFUNCTION(BlueprintCallable, Category = "PLL Synchronization")
+    // PLL 대역폭 설정
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     void SetPLLBandwidth(float Bandwidth);
 
-    // Set PLL damping parameter
-    UFUNCTION(BlueprintCallable, Category = "PLL Synchronization")
+    // PLL 감쇠 계수 설정
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     void SetPLLDamping(float Damping);
 
     // Log detailed debug information about the timecode component
@@ -305,7 +303,7 @@ private:
     // nDisplay-based role determination
     bool CheckNDisplayRole();
 
-    // Initialize PLL settings
+    // PLL 초기화 함수
     void InitializePLLSettings();
 
     // Network message reception callback

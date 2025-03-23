@@ -1,150 +1,149 @@
-﻿// TimecodeNetworkManager.h
-
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "UObject/Object.h"
-#include "Networking.h"  // 네트워킹 관련 헤더들을 한 번에 포함
-#include "TimecodeNetworkTypes.h"  // 이미 정의된 타입 사용
-#include "TimecodePLL.h"
+#include "UObject/NoExportTypes.h"
+#include "Common/UdpSocketReceiver.h"
+#include "Common/UdpSocketBuilder.h"
+#include "Networking.h"
+#include "Sockets.h"
+#include "SocketSubsystem.h"
+#include "IPAddress.h"
+#include "Serialization/ArrayReader.h"
+#include "TimecodeNetworkTypes.h"
+#include "TimecodePLL.h"  // 추가된 헤더
 #include "TimecodeNetworkManager.generated.h"
 
 class FSocket;
 class FUdpSocketReceiver;
-struct FIPv4Endpoint;
+
+// Network connection state enum
+UENUM(BlueprintType)
+enum class ENetworkConnectionState : uint8
+{
+    Disconnected,  // Not connected
+    Connecting,    // Connecting
+    Connected      // Connected
+};
+
+// Timecode message receive delegate
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeMessageReceived, const FTimecodeNetworkMessage&, Message);
+
+// Network state change delegate
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkStateChanged, ENetworkConnectionState, NewState);
+
+// Message received delegate
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMessageReceived, const FTimecodeNetworkMessage&, Message);
 
 /**
- * Network manager for timecode synchronization
+ * Timecode network manager class
  */
-UCLASS()
+UCLASS(BlueprintType)
 class TIMECODESYNC_API UTimecodeNetworkManager : public UObject
 {
     GENERATED_BODY()
 
 public:
     UTimecodeNetworkManager();
+    virtual ~UTimecodeNetworkManager();
 
-    virtual void BeginDestroy() override;
+    // Network initialization (master/slave mode)
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool Initialize(bool bIsMaster, int32 Port);
 
-    /**
-     * Initialize the network manager
-     * @param bInIsMaster True to initialize as master, false as slave
-     * @param InPort UDP port to listen on
-     * @return True if initialization succeeded
-     */
-    bool Initialize(bool bInIsMaster, int32 InPort);
-
-    /**
-     * Shut down the network manager
-     */
+    // Network shutdown
+    UFUNCTION(BlueprintCallable, Category = "Network")
     void Shutdown();
 
-    /**
-     * Send a timecode message
-     * @param Timecode The timecode string to send
-     * @param MessageType The type of message to send
-     * @return True if the message was sent successfully
-     */
-    bool SendTimecodeMessage(const FString& Timecode, ETimecodeMessageType MessageType);
+    // Send timecode message
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool SendTimecodeMessage(const FString& Timecode, ETimecodeMessageType MessageType = ETimecodeMessageType::TimecodeSync);
 
-    /**
-     * Send an event message
-     * @param EventName The name of the event
-     * @param Timecode The timecode associated with the event
-     * @return True if the message was sent successfully
-     */
+    // Send event message
+    UFUNCTION(BlueprintCallable, Category = "Network")
     bool SendEventMessage(const FString& EventName, const FString& Timecode);
 
-    /**
-     * Set the role mode
-     * @param NewMode The new role mode
-     */
-    void SetRoleMode(ETimecodeRoleMode NewMode);
-
-    /**
-     * Get the current role mode
-     * @return The current role mode
-     */
-    ETimecodeRoleMode GetRoleMode() const;
-
-    /**
-     * Set the manual master flag
-     * @param bInIsManuallyMaster True to set as manual master
-     */
-    void SetManualMaster(bool bInIsManuallyMaster);
-
-    /**
-     * Get the manual master flag
-     * @return True if manually set as master
-     */
-    bool GetIsManuallyMaster() const;
-
-    /**
-     * Set the master IP address
-     * @param InMasterIP The master IP address
-     */
-    void SetMasterIPAddress(const FString& InMasterIP);
-
-    /**
-     * Get the master IP address
-     * @return The master IP address
-     */
-    FString GetMasterIPAddress() const;
-
-    /**
-     * Check if this instance is the master
-     * @return True if this instance is the master
-     */
-    bool IsMaster() const;
-
-    /**
-     * Join a multicast group
-     * @param MulticastGroup The multicast group address
-     * @return True if join was successful
-     */
-    bool JoinMulticastGroup(const FString& MulticastGroup);
-
-    /**
-     * Get the connection state
-     * @return The current connection state
-     */
-    ENetworkConnectionState GetConnectionState() const;
-
-    /**
-     * Get the current timecode
-     * @return The current timecode string
-     */
-    FString GetCurrentTimecode() const;
-
-    /**
-     * Check if the network manager has received a valid message
-     * @return True if a valid message has been received
-     */
-    bool HasReceivedValidMessage() const;
-
-    /**
-     * Set the target IP address
-     * @param IPAddress The target IP address
-     */
+    // Set target IP
+    UFUNCTION(BlueprintCallable, Category = "Network")
     void SetTargetIP(const FString& IPAddress);
 
-    /**
-     * Set the target port
-     * @param Port The target port number
-     */
+    // Join multicast group
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool JoinMulticastGroup(const FString& MulticastGroup);
+
+    // Check network state
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    ENetworkConnectionState GetConnectionState() const;
+
+    // Timecode message receive delegate
+    UPROPERTY(BlueprintAssignable, Category = "Network")
+    FOnTimecodeMessageReceived OnTimecodeMessageReceived;
+
+    // Network state change delegate
+    UPROPERTY(BlueprintAssignable, Category = "Network")
+    FOnNetworkStateChanged OnNetworkStateChanged;
+
+    // Role mode set/get functions
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetRoleMode(ETimecodeRoleMode NewMode);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    ETimecodeRoleMode GetRoleMode() const;
+
+    // Manual master set/get functions
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetManualMaster(bool bInIsManuallyMaster);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool GetIsManuallyMaster() const;
+
+    // Master IP set/get functions (for manual slave mode)
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetMasterIPAddress(const FString& InMasterIP);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    FString GetMasterIPAddress() const;
+
+    // Role mode change delegate
+    UPROPERTY(BlueprintAssignable, Category = "Network")
+    FRoleModeChangedDelegate OnRoleModeChanged;
+
+    // Network state functions
+    bool HasReceivedValidMessage() const { return bHasReceivedValidMessage; }
+
+    // Get current timecode
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    FString GetCurrentTimecode() const;
+
+    // Check if master
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool IsMaster() const;
+
+    // Message received delegate
+    UPROPERTY(BlueprintAssignable, Category = "Network")
+    FOnMessageReceived OnMessageReceived;
+
+    // 패킷 손실 처리 테스트 함수 추가
+    UFUNCTION(BlueprintCallable, Category = "TimecodeSync|Tests")
+    bool TestPacketLossHandling(float SimulatedPacketLossRate = 0.3f);
+
+    // 대상 포트 설정 함수
+    UFUNCTION(BlueprintCallable, Category = "Network")
     void SetTargetPort(int32 Port);
 
-    /**
-     * Get the target port
-     * @return The target port number
-     */
+    // 대상 포트 가져오기 함수
+    UFUNCTION(BlueprintCallable, Category = "Network")
     int32 GetTargetPort() const;
+
+    // -------------------------
+    // PLL 관련 함수들 추가
+    // -------------------------
 
     /**
      * Initialize the PLL component with specified parameters
      * @param InBandwidth PLL bandwidth (0.01-1.0)
      * @param InDamping PLL damping factor (0.1-2.0)
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     void InitializePLL(float InBandwidth = 0.1f, float InDamping = 0.7f);
 
     /**
@@ -158,6 +157,7 @@ public:
      * Get the PLL-corrected local time
      * @return The corrected local time
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     double GetPLLCorrectedTime() const;
 
     /**
@@ -166,6 +166,7 @@ public:
      * @param FrameRate The frame rate to use for conversion
      * @return The timecode value in seconds
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     double TimecodeToSeconds(const FString& Timecode, float FrameRate) const;
 
     /**
@@ -175,119 +176,108 @@ public:
      * @param bDropFrame Whether to use drop frame format
      * @return The formatted timecode string
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     FString SecondsToTimecode(double Seconds, float FrameRate, bool bDropFrame) const;
 
     /**
      * Check if the PLL is currently locked (stable synchronization)
      * @return True if PLL is locked, false otherwise
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     bool IsPLLLocked() const;
 
     /**
      * Get the current phase error (time difference between master and slave)
      * @return The phase error in seconds
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     double GetPLLPhaseError() const;
 
     /**
      * Get the current frequency ratio (for debugging)
      * @return The frequency ratio
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     double GetPLLFrequencyRatio() const;
 
     /**
      * Toggle PLL usage
      * @param bEnable Whether to enable PLL correction
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     void SetUsePLL(bool bEnable);
 
     /**
      * Check if PLL is currently enabled
      * @return True if PLL is enabled, false otherwise
      */
+    UFUNCTION(BlueprintCallable, Category = "Timecode|PLL")
     bool IsUsingPLL() const;
 
-    // Delegate for received messages (두 이름 모두 지원)
-    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeMessageReceived, const FTimecodeNetworkMessage&, Message);
-    UPROPERTY(BlueprintAssignable, Category = "Timecode Network")
-    FOnTimecodeMessageReceived OnTimecodeMessageReceived;
-
-    // 이전 코드와의 호환성을 위한 별칭
-    UPROPERTY(BlueprintAssignable, Category = "Timecode Network")
-    FOnTimecodeMessageReceived OnMessageReceived;
-
-    // Delegate for network state changes
-    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkStateChanged, ENetworkConnectionState, NewState);
-    UPROPERTY(BlueprintAssignable, Category = "Timecode Network")
-    FOnNetworkStateChanged OnNetworkStateChanged;
-
-    // Delegate for role mode changes
-    UPROPERTY(BlueprintAssignable, Category = "Timecode Network")
-    FRoleModeChangedDelegate OnRoleModeChanged;
-
 private:
-    // Socket for network communication
+    // UDP socket
     FSocket* Socket;
 
-    // Socket receiver for incoming data
+    // UDP receiver
     FUdpSocketReceiver* Receiver;
 
     // Connection state
     ENetworkConnectionState ConnectionState;
 
-    // Instance ID for identifying this network manager
+    // Sender ID (unique identifier)
     FString InstanceID;
 
-    // UDP port for receiving messages
+    // Port number
     int32 PortNumber;
 
-    // Target IP address for sending messages
+    // Target IP address
     FString TargetIPAddress;
-
-    // Target port for sending messages
-    int32 TargetPortNumber;
 
     // Multicast group address
     FString MulticastGroupAddress;
 
-    // Whether this instance is in master mode
+    // Master mode flag
     bool bIsMasterMode;
 
-    // Role mode (automatic or manual)
-    ETimecodeRoleMode RoleMode;
+    // UDP receive callback
+    void OnUDPReceived(const FArrayReaderPtr& DataPtr, const FIPv4Endpoint& Endpoint);
 
-    // Manual master flag
-    bool bIsManuallyMaster;
-
-    // Master IP address (for manual slave mode)
-    FString MasterIPAddress;
-
-    // Whether the role was automatically determined
-    bool bRoleAutomaticallyDetermined;
-
-    // Whether a valid message has been received
-    bool bHasReceivedValidMessage;
-
-    // Helper function to create socket
+    // Socket creation function
     bool CreateSocket();
 
-    // Callback for UDP received data
-    void OnUDPReceived(const FArrayReaderPtr& ArrayReaderPtr, const FIPv4Endpoint& EndPt);
-
-    // Process received message
+    // Message processing function
     void ProcessMessage(const FTimecodeNetworkMessage& Message);
 
-    // Set connection state
+    // Connection state set function
     void SetConnectionState(ENetworkConnectionState NewState);
 
     // Send heartbeat message
     void SendHeartbeat();
 
-    // Auto-detect role based on IP address
+    // Role mode setting
+    ETimecodeRoleMode RoleMode;
+
+    // Manual mode master flag
+    bool bIsManuallyMaster;
+
+    // Manual master IP address (for slave mode)
+    FString MasterIPAddress;
+
+    // Auto role detection function
     bool AutoDetectRole();
 
-    // Test packet loss handling (for testing purposes)
-    bool TestPacketLossHandling(float SimulatedPacketLossRate = 0.2f);
+    // Auto role detection result flag
+    bool bRoleAutomaticallyDetermined;
+
+    // Network state tracking
+    bool bHasReceivedValidMessage = false;
+
+    // 대상 포트 번호
+    int32 TargetPortNumber;
+
+    // -------------------------
+    // PLL 관련 변수들 추가
+    // -------------------------
 
     // PLL instance
     UPROPERTY()
