@@ -1,0 +1,29 @@
+﻿{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Timecode Sync",
+	"Description": "Master/Slave timecode synchronization plugin",
+	"Category": "Other",
+	"CreatedBy": "You",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "TimecodeSync",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "TimecodeSyncEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
