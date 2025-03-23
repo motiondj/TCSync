@@ -87,6 +87,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Network", meta = (ClampMin = "0.001", ClampMax = "1.0"))
     float SyncInterval;
 
+    /** PLL Settings */
+
+    // Whether to use PLL for timecode synchronization
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PLL Synchronization", meta = (AdvancedDisplay))
+    bool bUsePLL;
+
+    // PLL bandwidth parameter (controls reaction speed)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PLL Synchronization", meta = (AdvancedDisplay, EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.01", ClampMax = "1.0"))
+    float PLLBandwidth;
+
+    // PLL damping parameter (controls stability)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PLL Synchronization", meta = (AdvancedDisplay, EditCondition = "bUsePLL", EditConditionHides, ClampMin = "0.1", ClampMax = "2.0"))
+    float PLLDamping;
+
     /** Status and Statistics (Read-only) */
 
     // Current timecode (read-only)
@@ -132,6 +146,9 @@ protected:
 
     // Called every frame
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+    // Called when property is changed in editor
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 
 public:
     /** Timecode Control Functions */
@@ -226,6 +243,32 @@ public:
     UFUNCTION(BlueprintPure, Category = "Timecode Role")
     bool GetIsMaster() const;
 
+    /** PLL Functions */
+
+    // Enable or disable PLL
+    UFUNCTION(BlueprintCallable, Category = "PLL Synchronization")
+    void SetUsePLL(bool bEnable);
+
+    // Check if PLL is locked (stable synchronization)
+    UFUNCTION(BlueprintPure, Category = "PLL Synchronization")
+    bool IsPLLLocked() const;
+
+    // Get current PLL phase error (for debugging)
+    UFUNCTION(BlueprintPure, Category = "PLL Synchronization")
+    double GetPLLPhaseError() const;
+
+    // Get current PLL frequency ratio (for debugging)
+    UFUNCTION(BlueprintPure, Category = "PLL Synchronization")
+    double GetPLLFrequencyRatio() const;
+
+    // Set PLL bandwidth parameter
+    UFUNCTION(BlueprintCallable, Category = "PLL Synchronization")
+    void SetPLLBandwidth(float Bandwidth);
+
+    // Set PLL damping parameter
+    UFUNCTION(BlueprintCallable, Category = "PLL Synchronization")
+    void SetPLLDamping(float Damping);
+
     // Log detailed debug information about the timecode component
     UFUNCTION(BlueprintCallable, Category = "Timecode|Debug")
     void LogDebugInfo();
@@ -261,6 +304,9 @@ private:
 
     // nDisplay-based role determination
     bool CheckNDisplayRole();
+
+    // Initialize PLL settings
+    void InitializePLLSettings();
 
     // Network message reception callback
     UFUNCTION()

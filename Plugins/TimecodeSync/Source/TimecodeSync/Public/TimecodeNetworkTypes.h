@@ -3,6 +3,15 @@
 #include "CoreMinimal.h"
 #include "TimecodeNetworkTypes.generated.h"
 
+// Network connection state enum
+UENUM(BlueprintType)
+enum class ENetworkConnectionState : uint8
+{
+    Disconnected UMETA(DisplayName = "Disconnected"),
+    Connecting   UMETA(DisplayName = "Connecting"),
+    Connected    UMETA(DisplayName = "Connected")
+};
+
 // Timecode message type enum
 UENUM(BlueprintType)
 enum class ETimecodeMessageType : uint8
