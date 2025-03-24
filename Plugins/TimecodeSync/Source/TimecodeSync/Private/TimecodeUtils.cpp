@@ -2,315 +2,266 @@
 #include "Misc/DateTime.h"
 #include "Misc/Parse.h"
 
-FString UTimecodeUtils::SecondsToTimecode(float TimeInSeconds, float FrameRate, bool bUseDropFrame)
+// SMPTE 드롭 프레임 타임코드 계산을 위한 헬퍼 함수
+static void CalculateDropFrameTimecode(double TotalSeconds, double FrameRate, bool bIsDropFrame,
+    int32& OutHours, int32& OutMinutes, int32& OutSeconds, int32& OutFrames)
 {
-    // Handle negative time
-    TimeInSeconds = FMath::Max(0.0f, TimeInSeconds);
+    OutHours = 0;
+    OutMinutes = 0;
+    OutSeconds = 0;
+    OutFrames = 0;
 
-    // 특정 문제 케이스 처리 - 드롭 프레임 테스트에서 확인된 실패 케이스
-    if (bUseDropFrame)
+    if (!bIsDropFrame || (FrameRate != 29.97 && FrameRate != 59.94))
     {
-        // 10.5초 케이스
-        if (FMath::IsNearlyEqual(TimeInSeconds, 10.5f, 0.01f))
-        {
-            if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-                return TEXT("00:00:10;24");
-            else if (FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
-                return TEXT("00:00:10;39");
-        }
-        // 59.9초 케이스
-        else if (FMath::IsNearlyEqual(TimeInSeconds, 59.9f, 0.01f))
-        {
-            if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-                return TEXT("00:00:61;26");
-            else if (FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
-                return TEXT("00:00:60;50");
-        }
-        // 3600초 (1시간) 케이스
-        else if (FMath::IsNearlyEqual(TimeInSeconds, 3600.0f, 0.01f))
-        {
-            if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-                return TEXT("01:00:03;21");
-            else if (FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
-                return TEXT("01:00:03;39");
-        }
-        // 3661.5초 (1시간 1분 1.5초) 케이스
-        else if (FMath::IsNearlyEqual(TimeInSeconds, 3661.5f, 0.01f))
-        {
-            if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-                return TEXT("01:01:05;10");
-            else if (FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
-                return TEXT("01:01:05;15");
-        }
+        // 일반 타임코드 계산
+        int32 TotalFrames = FMath::RoundToInt(TotalSeconds * FrameRate);
+
+        int32 FramesPerHour = FMath::RoundToInt(FrameRate * 3600);
+        int32 FramesPerMinute = FMath::RoundToInt(FrameRate * 60);
+        int32 FramesPerSecond = FMath::RoundToInt(FrameRate);
+
+        OutHours = TotalFrames / FramesPerHour;
+        TotalFrames %= FramesPerHour;
+
+        OutMinutes = TotalFrames / FramesPerMinute;
+        TotalFrames %= FramesPerMinute;
+
+        OutSeconds = TotalFrames / FramesPerSecond;
+        OutFrames = TotalFrames % FramesPerSecond;
+
+        return;
     }
 
-    // Default non-drop frame calculation
-    if (!bUseDropFrame ||
-        (!FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) &&
-            !FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f)))
+    // 드롭 프레임 계산 (SMPTE 표준)
+    int32 DropFrames = (FrameRate == 29.97) ? 2 : 4; // 29.97fps에서는 2프레임, 59.94fps에서는 4프레임을 드롭
+
+    // 더 정확한 계산을 위해 실제 프레임 속도를 사용
+    double ActualFrameRate = (FrameRate == 29.97) ? 30.0 * 1000.0 / 1001.0 : 60.0 * 1000.0 / 1001.0;
+
+    // 총 프레임 수 계산
+    int64 TotalFrames = FMath::RoundToInt(TotalSeconds * ActualFrameRate);
+
+    // SMPTE 드롭 프레임 수식
+    // 매 분마다 첫 2(또는 4)개 프레임을 드롭하되, 10분 단위에서는 제외
+    int64 FramesPerMinute = FMath::RoundToInt(ActualFrameRate * 60);
+    int64 FramesPerTenMinutes = FramesPerMinute * 10;
+    int64 FramesPerHour = FramesPerMinute * 60;
+
+    // 10분 단위 블록과 나머지 분 계산
+    int64 TenMinuteBlocks = TotalFrames / FramesPerTenMinutes;
+    int64 RemainingFrames = TotalFrames % FramesPerTenMinutes;
+
+    // 첫 번째 분을 초과하는 나머지 분 계산 (첫 분에는 드롭하지 않음)
+    int64 ExtraMinutes = 0;
+    if (RemainingFrames >= FramesPerMinute)
     {
-        // Calculate hours, minutes, seconds
-        int32 Hours = FMath::FloorToInt(TimeInSeconds / 3600.0f);
-        int32 Minutes = FMath::FloorToInt((TimeInSeconds - Hours * 3600.0f) / 60.0f);
-        int32 Seconds = FMath::FloorToInt(TimeInSeconds - Hours * 3600.0f - Minutes * 60.0f);
+        ExtraMinutes = (RemainingFrames - FramesPerMinute) / (FramesPerMinute - DropFrames) + 1;
 
-        // Calculate frames
-        float FrameTime = TimeInSeconds - FMath::FloorToInt(TimeInSeconds);
-        int32 Frames = FMath::FloorToInt(FrameTime * FrameRate);
-
-        // Generate timecode string (HH:MM:SS:FF format)
-        return FString::Printf(TEXT("%02d:%02d:%02d:%02d"), Hours, Minutes, Seconds, Frames);
+        // 마지막 부분 체크 (정확히 분 경계에 있지 않은 경우)
+        int64 Check = FramesPerMinute + (ExtraMinutes - 1) * (FramesPerMinute - DropFrames) + DropFrames;
+        if (RemainingFrames < Check)
+            ExtraMinutes--;
     }
 
-    // 개선된 드롭 프레임 계산 알고리즘
-    // SMPTE 표준에 따른 구현
-    double ExactFrameRate = FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) ? 29.97 : 59.94;
-    int32 DropFrames = FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) ? 2 : 4;
-
-    // 총 프레임 수 계산 (정확한 계산을 위해 double 사용)
-    double TotalFramesDouble = TimeInSeconds * ExactFrameRate;
-    int64 TotalFrames = static_cast<int64>(TotalFramesDouble);
-
-    // 드롭 프레임 타임코드 계산을 위한 값들
-    int64 FramesPerDay = static_cast<int64>(ExactFrameRate * 86400.0); // 24시간 * 60분 * 60초
-    int64 FramesPerHour = static_cast<int64>(ExactFrameRate * 3600.0);
-    int64 FramesPerMinute = static_cast<int64>(ExactFrameRate * 60.0);
-    int64 FramesPerSecond = static_cast<int64>(ExactFrameRate);
-
-    // 드롭 프레임 조정 계산
-    int64 DropFramesPerMinute = DropFrames;
-    int64 TotalMinutes = TotalFrames / FramesPerMinute;
-    int64 TotalTenMinutes = TotalMinutes / 10;
-
-    // 드롭할 총 프레임 수 계산
-    int64 TotalDroppedFrames = (TotalMinutes - TotalTenMinutes) * DropFramesPerMinute;
-
-    // 드롭 프레임을 고려한 조정된 총 프레임 수
+    // 타임코드 조정을 위한 총 드롭 프레임 계산
+    int64 TotalMinutes = TenMinuteBlocks * 10 + ExtraMinutes;
+    int64 TotalDroppedFrames = DropFrames * (TotalMinutes - TenMinuteBlocks);
     int64 AdjustedFrames = TotalFrames + TotalDroppedFrames;
 
-    // 시간, 분, 초, 프레임 계산
-    int32 Hours = static_cast<int32>(AdjustedFrames / FramesPerHour);
+    // 시간, 분, 초, 프레임으로 변환
+    OutHours = int32(AdjustedFrames / FramesPerHour);
     AdjustedFrames %= FramesPerHour;
 
-    int32 Minutes = static_cast<int32>(AdjustedFrames / FramesPerMinute);
+    OutMinutes = int32(AdjustedFrames / FramesPerMinute);
     AdjustedFrames %= FramesPerMinute;
 
-    int32 Seconds = static_cast<int32>(AdjustedFrames / FramesPerSecond);
-    int32 Frames = static_cast<int32>(AdjustedFrames % FramesPerSecond);
+    // 하나의 변수를 사용하여 프레임 레이트를 계산
+    int32 FramesPerSecond = FMath::RoundToInt(ActualFrameRate);
+    OutSeconds = int32(AdjustedFrames / FramesPerSecond);
+    OutFrames = int32(AdjustedFrames % FramesPerSecond);
 
-    // 첫 프레임이 드롭되는 위치인지 확인 (매 분마다, 10분의 배수 제외)
-    if (Seconds == 0 && Frames < DropFrames && Minutes % 10 != 0) {
-        // 드롭 프레임 처리 - 첫 프레임들을 건너뛰고 다음 유효한 프레임으로
-        Frames = DropFrames;
+    // 드롭 프레임 타임코드의 특수 규칙: 00:00:00이 아니고, 매 분 시작 시점인데 10분 배수가 아니면, 
+    // 첫 2(또는 4)개의 프레임을 건너뜁니다.
+    if (OutSeconds == 0 && OutFrames < DropFrames && OutMinutes % 10 != 0)
+    {
+        OutFrames = DropFrames;
+    }
+}
+
+// 드롭 프레임 타임코드에서 초로 변환하는 헬퍼 함수
+static double DropFrameTimecodeToSeconds(int32 Hours, int32 Minutes, int32 Seconds, int32 Frames, double FrameRate)
+{
+    // 더 정확한 계산을 위해 실제 프레임 속도 사용
+    double ActualFrameRate = (FMath::IsNearlyEqual(FrameRate, 29.97, 0.01)) ?
+        30.0 * 1000.0 / 1001.0 : 60.0 * 1000.0 / 1001.0;
+
+    int32 DropFrames = (FMath::IsNearlyEqual(FrameRate, 29.97, 0.01)) ? 2 : 4;
+
+    // 프레임 단위 변환 상수
+    int32 FramesPerHour = FMath::RoundToInt(ActualFrameRate * 3600);
+    int32 FramesPerMinute = FMath::RoundToInt(ActualFrameRate * 60);
+    int32 FramesPerSecond = FMath::RoundToInt(ActualFrameRate);
+    int32 FramesPerTenMinutes = FMath::RoundToInt(ActualFrameRate * 600) - DropFrames * 9;
+
+    // 총 10분 단위와 나머지 분 계산
+    int32 TenMinutesCount = (Hours * 6) + (Minutes / 10);
+    int32 RemainingMinutes = Minutes % 10;
+
+    // 타임코드를 프레임으로 변환 (드롭 프레임 조정 적용)
+    int64 TotalFrames = 0;
+
+    // 10분 단위 블록 처리
+    TotalFrames += TenMinutesCount * FramesPerTenMinutes;
+
+    // 나머지 분에 대한 프레임 계산 (첫 분에는 드롭하지 않음)
+    if (RemainingMinutes > 0)
+    {
+        // 첫 분의 모든 프레임
+        TotalFrames += FramesPerMinute;
+
+        // 나머지 분에 대해 드롭 프레임 적용
+        TotalFrames += (RemainingMinutes - 1) * (FramesPerMinute - DropFrames);
     }
 
+    // 초 및 프레임 추가
+    TotalFrames += Seconds * FramesPerSecond + Frames;
+
+    // 프레임을 초로 변환
+    double TotalSeconds = static_cast<double>(TotalFrames) / ActualFrameRate;
+
+    return TotalSeconds;
+}
+
+FString UTimecodeUtils::SecondsToTimecode(float TimeInSeconds, float FrameRate, bool bUseDropFrame)
+{
+    // 음수 시간 처리
+    TimeInSeconds = FMath::Max(0.0f, TimeInSeconds);
+
+    // 유효한 프레임 레이트 확인
+    if (FrameRate <= 0.0f)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Invalid frame rate: %f, using default 30fps"), FrameRate);
+        FrameRate = 30.0f;
+    }
+
+    // 드롭 프레임은 29.97fps와 59.94fps에만 적용
+    bool bIsDropFrame = bUseDropFrame && (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) ||
+        FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f));
+
+    // 시간, 분, 초, 프레임 계산
+    int32 Hours, Minutes, Seconds, Frames;
+
+    // SMPTE 표준에 따른 타임코드 계산
+    CalculateDropFrameTimecode(TimeInSeconds, FrameRate, bIsDropFrame, Hours, Minutes, Seconds, Frames);
+
     // 드롭 프레임 타임코드 포맷 (세미콜론 사용)
-    return FString::Printf(TEXT("%02d:%02d:%02d;%02d"), Hours, Minutes, Seconds, Frames);
+    return FString::Printf(TEXT("%02d:%02d:%02d%c%02d"),
+        Hours, Minutes, Seconds,
+        bIsDropFrame ? TEXT(';') : TEXT(':'),
+        Frames);
 }
 
 float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate, bool bUseDropFrame)
 {
-    // Validate frame rate
+    // 유효한 프레임 레이트 확인
     if (FrameRate <= 0.0f)
     {
-        UE_LOG(LogTemp, Error, TEXT("Invalid frame rate: %f"), FrameRate);
-        FrameRate = 30.0f; // Replace with default value
+        UE_LOG(LogTemp, Error, TEXT("Invalid frame rate: %f, using default 30fps"), FrameRate);
+        FrameRate = 30.0f;
     }
 
-    // Remove whitespace and normalize timecode
+    // 공백 제거 및 타임코드 정규화
     FString CleanTimecode = Timecode.TrimStartAndEnd();
 
-    // 특정 문제 케이스 처리 - 드롭 프레임 테스트에서 확인된 실패 케이스
-    if (bUseDropFrame)
-    {
-        // 29.97fps 드롭 프레임 특별 케이스
-        if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-        {
-            if (CleanTimecode == TEXT("00:00:10;24"))
-                return 10.5f;
-            else if (CleanTimecode == TEXT("00:00:61;26"))
-                return 59.9f;
-            else if (CleanTimecode == TEXT("01:00:03;21"))
-                return 3600.0f;
-            else if (CleanTimecode == TEXT("01:01:05;10"))
-                return 3661.5f;
-        }
-        // 59.94fps 드롭 프레임 특별 케이스
-        else if (FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
-        {
-            if (CleanTimecode == TEXT("00:00:10;39"))
-                return 10.5f;
-            else if (CleanTimecode == TEXT("00:00:60;50"))
-                return 59.9f;
-            else if (CleanTimecode == TEXT("01:00:03;39"))
-                return 3600.0f;
-            else if (CleanTimecode == TEXT("01:01:05;15"))
-                return 3661.5f;
-        }
-    }
-
-    // 구분자 처리 개선: 드롭 프레임 타임코드는 세미콜론(;)을 구분자로 사용
+    // 세미콜론 확인으로 드롭 프레임 여부 감지
     bool bHasSemicolon = CleanTimecode.Contains(TEXT(";"));
+    bool bIsDropFrame = bUseDropFrame || bHasSemicolon;
 
-    // 드롭 프레임 타임코드 구분자 확인
-    if (bHasSemicolon && !bUseDropFrame) {
-        // 세미콜론이 있지만 드롭 프레임 플래그가 없으면 드롭 프레임으로 간주
-        bUseDropFrame = true;
-        if (!FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) && !FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f)) {
-            // 드롭 프레임에 적합한 프레임 레이트로 조정
+    // 드롭 프레임 플래그와 프레임 레이트 일관성 확인
+    if (bIsDropFrame)
+    {
+        // 드롭 프레임은 29.97fps와 59.94fps에만 적용
+        if (!FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) && !FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
+        {
+            // 드롭 프레임에 가장 가까운 적절한 프레임 레이트로 조정
             FrameRate = 29.97f;
+            UE_LOG(LogTemp, Warning, TEXT("Adjusted frame rate to 29.97fps for drop frame timecode"));
         }
     }
 
-    // 타임코드 구문 분석을 위한 표준화된 형식으로 변환
+    // 타임코드 구문 분석을 위한 표준화
     FString NormalizedTimecode = CleanTimecode;
-    if (bHasSemicolon) {
+    if (bHasSemicolon)
+    {
         NormalizedTimecode = CleanTimecode.Replace(TEXT(";"), TEXT(":"));
     }
-    else if (bUseDropFrame) {
-        // 드롭 프레임이지만 세미콜론이 없는 경우 (잘못된 형식)
-        UE_LOG(LogTemp, Warning, TEXT("Drop frame timecode without semicolon: %s"), *CleanTimecode);
-    }
 
-    // Validate timecode format and parse
-    TArray<FString> TimeParts;
-    if (NormalizedTimecode.ParseIntoArray(TimeParts, TEXT(":"), false) != 4)
+    // 타임코드 구분 및 파싱
+    int32 Hours = 0, Minutes = 0, Seconds = 0, Frames = 0;
+
+    // 정규 표현식보다 간단한 형식 검사 및 파싱 사용
+    if (NormalizedTimecode.Len() >= 11 &&
+        NormalizedTimecode[2] == ':' &&
+        NormalizedTimecode[5] == ':' &&
+        (NormalizedTimecode[8] == ':' || CleanTimecode[8] == ';'))
     {
-        UE_LOG(LogTemp, Warning, TEXT("Invalid timecode format: %s"), *CleanTimecode);
-
-        // Try manual parsing
-        if (NormalizedTimecode.Len() >= 11 &&
-            NormalizedTimecode[2] == ':' &&
-            NormalizedTimecode[5] == ':' &&
-            (NormalizedTimecode[8] == ':' || NormalizedTimecode[8] == ';'))
-        {
-            FString HourStr = NormalizedTimecode.Mid(0, 2);
-            FString MinStr = NormalizedTimecode.Mid(3, 2);
-            FString SecStr = NormalizedTimecode.Mid(6, 2);
-            FString FrameStr = NormalizedTimecode.Mid(9, 2);
-
-            int32 Hours = FCString::Atoi(*HourStr);
-            int32 Minutes = FCString::Atoi(*MinStr);
-            int32 Seconds = FCString::Atoi(*SecStr);
-            int32 Frames = FCString::Atoi(*FrameStr);
-
-            UE_LOG(LogTemp, Warning, TEXT("Manual parsing result - H:%d M:%d S:%d F:%d"),
-                Hours, Minutes, Seconds, Frames);
-
-            // 개선된 계산 로직으로 이동
-            if (bUseDropFrame && (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) || FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f)))
-            {
-                return CalculateDropFrameSeconds(Hours, Minutes, Seconds, Frames, FrameRate);
-            }
-            else
-            {
-                // 일반 프레임 레이트 계산
-                float FrameSeconds = (FrameRate > 0.0f) ? (static_cast<float>(Frames) / FrameRate) : 0.0f;
-                return Hours * 3600.0f + Minutes * 60.0f + Seconds + FrameSeconds;
-            }
-        }
-
-        return 0.0f;
+        Hours = FCString::Atoi(*NormalizedTimecode.Mid(0, 2));
+        Minutes = FCString::Atoi(*NormalizedTimecode.Mid(3, 2));
+        Seconds = FCString::Atoi(*NormalizedTimecode.Mid(6, 2));
+        Frames = FCString::Atoi(*NormalizedTimecode.Mid(9, 2));
     }
-
-    // Parse hours, minutes, seconds, frames
-    int32 Hours = FCString::Atoi(*TimeParts[0]);
-    int32 Minutes = FCString::Atoi(*TimeParts[1]);
-    int32 Seconds = FCString::Atoi(*TimeParts[2]);
-    int32 Frames = FCString::Atoi(*TimeParts[3]);
+    else
+    {
+        // 대체 파싱 시도
+        TArray<FString> TimeParts;
+        if (NormalizedTimecode.ParseIntoArray(TimeParts, TEXT(":"), false) == 4)
+        {
+            Hours = FCString::Atoi(*TimeParts[0]);
+            Minutes = FCString::Atoi(*TimeParts[1]);
+            Seconds = FCString::Atoi(*TimeParts[2]);
+            Frames = FCString::Atoi(*TimeParts[3]);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Invalid timecode format: %s"), *CleanTimecode);
+            return 0.0f;
+        }
+    }
 
     UE_LOG(LogTemp, Log, TEXT("Parsed timecode %s into H:%d M:%d S:%d F:%d"),
         *CleanTimecode, Hours, Minutes, Seconds, Frames);
 
-    // 개선된 드롭 프레임 타임코드 계산
-    if (bUseDropFrame && (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) || FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f)))
+    // SMPTE 드롭 프레임 타임코드 계산
+    double TotalSeconds = 0.0;
+
+    if (bIsDropFrame && (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) || FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f)))
     {
-        return CalculateDropFrameSeconds(Hours, Minutes, Seconds, Frames, FrameRate);
+        TotalSeconds = DropFrameTimecodeToSeconds(Hours, Minutes, Seconds, Frames, FrameRate);
     }
     else
     {
         // 일반 타임코드 계산
-        float FrameSeconds = (FrameRate > 0.0f) ? (static_cast<float>(Frames) / FrameRate) : 0.0f;
-        float TotalSeconds = Hours * 3600.0f + Minutes * 60.0f + Seconds + FrameSeconds;
-
-        UE_LOG(LogTemp, Log, TEXT("Calculated seconds: H:%f + M:%f + S:%f + F:%f = Total:%f"),
-            Hours * 3600.0f, Minutes * 60.0f, (float)Seconds, FrameSeconds, TotalSeconds);
-
-        return TotalSeconds;
-    }
-}
-
-float UTimecodeUtils::CalculateDropFrameSeconds(int32 Hours, int32 Minutes, int32 Seconds, int32 Frames, float FrameRate)
-{
-    // 특수 케이스 확인
-    if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-    {
-        if (Hours == 0 && Minutes == 0 && Seconds == 10 && Frames == 24)
-            return 10.5f;
-        else if (Hours == 0 && Minutes == 0 && Seconds == 61 && Frames == 26)
-            return 59.9f;
-        else if (Hours == 1 && Minutes == 0 && Seconds == 3 && Frames == 21)
-            return 3600.0f;
-        else if (Hours == 1 && Minutes == 1 && Seconds == 5 && Frames == 10)
-            return 3661.5f;
-    }
-    else if (FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f))
-    {
-        if (Hours == 0 && Minutes == 0 && Seconds == 10 && Frames == 39)
-            return 10.5f;
-        else if (Hours == 0 && Minutes == 0 && Seconds == 60 && Frames == 50)
-            return 59.9f;
-        else if (Hours == 1 && Minutes == 0 && Seconds == 3 && Frames == 39)
-            return 3600.0f;
-        else if (Hours == 1 && Minutes == 1 && Seconds == 5 && Frames == 15)
-            return 3661.5f;
+        double FrameSeconds = (double)Frames / FrameRate;
+        TotalSeconds = Hours * 3600.0 + Minutes * 60.0 + Seconds + FrameSeconds;
     }
 
-    double ExactFrameRate = FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) ? 29.97 : 59.94;
-    int32 DropFrames = FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) ? 2 : 4;
-
-    // 기본 프레임 계산
-    double FramesPerHour = ExactFrameRate * 3600.0;
-    double FramesPerMinute = ExactFrameRate * 60.0;
-    double FramesPerSecond = ExactFrameRate;
-
-    // 총 프레임 계산 (드롭 프레임 고려 전)
-    int64 TotalFrames = static_cast<int64>(Hours * FramesPerHour +
-        Minutes * FramesPerMinute +
-        Seconds * FramesPerSecond +
-        Frames);
-
-    // 총 분 계산
-    int64 TotalMinutes = Hours * 60 + Minutes;
-
-    // 10분 단위 계산
-    int64 TenMinuteChunks = TotalMinutes / 10;
-
-    // 드롭 프레임 조정
-    // 10분마다 DropFrames*9 프레임이 드롭되지 않음
-    int64 DroppedFrames = DropFrames * (TotalMinutes - TenMinuteChunks);
-
-    // 실제 프레임 번호 (드롭 프레임 보정)
-    int64 ActualFrames = TotalFrames - DroppedFrames;
-
-    // 초로 변환
-    double TotalSeconds = static_cast<double>(ActualFrames) / ExactFrameRate;
+    UE_LOG(LogTemp, Log, TEXT("Calculated seconds for %s: %.6f"), *CleanTimecode, TotalSeconds);
 
     return static_cast<float>(TotalSeconds);
 }
 
 FString UTimecodeUtils::GetCurrentSystemTimecode(float FrameRate, bool bUseDropFrame)
 {
-    // Get current system time
+    // 현재 시스템 시간 얻기
     FDateTime CurrentTime = FDateTime::Now();
 
-    // Calculate elapsed time in seconds since midnight
+    // 자정 이후 경과 시간(초) 계산
     float SecondsSinceMidnight =
         CurrentTime.GetHour() * 3600.0f +
         CurrentTime.GetMinute() * 60.0f +
         CurrentTime.GetSecond() +
         CurrentTime.GetMillisecond() / 1000.0f;
 
-    // Convert to timecode
+    // 타임코드로 변환
     return SecondsToTimecode(SecondsSinceMidnight, FrameRate, bUseDropFrame);
 }
