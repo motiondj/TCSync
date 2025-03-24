@@ -46,9 +46,6 @@ FString UTimecodeUtils::SecondsToTimecode(float TimeInSeconds, float FrameRate, 
         DropFrames = 4;
     }
 
-    // 정확한 SMPTE 드롭 프레임 알고리즘
-    // 참고: https://www.davidheidelberger.com/2010/06/10/drop-frame-timecode/
-
     // 총 프레임 수 계산
     double TotalSecondsD = static_cast<double>(TimeInSeconds);
     int64 TotalFrames = static_cast<int64>(TotalSecondsD * ActualFrameRate + 0.5); // 반올림
