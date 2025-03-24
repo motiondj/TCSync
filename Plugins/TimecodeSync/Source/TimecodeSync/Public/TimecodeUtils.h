@@ -41,4 +41,15 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Timecode")
     static FString GetCurrentSystemTimecode(float FrameRate, bool bUseDropFrame = false);
+
+    /**
+     * 드롭 프레임 타임코드를 초로 계산하는 헬퍼 함수
+     * @param Hours - 시간
+     * @param Minutes - 분
+     * @param Seconds - 초
+     * @param Frames - 프레임
+     * @param FrameRate - 프레임 레이트
+     * @return 타임코드에 해당하는 시간(초)
+     */
+    static float CalculateDropFrameSeconds(int32 Hours, int32 Minutes, int32 Seconds, int32 Frames, float FrameRate);
 };
