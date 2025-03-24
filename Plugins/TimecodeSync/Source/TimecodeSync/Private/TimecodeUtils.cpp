@@ -33,35 +33,53 @@ FString UTimecodeUtils::SecondsToTimecode(float TimeInSeconds, float FrameRate, 
     }
 
     // SMPTE 드롭 프레임 타임코드 계산
-    // 정확한 프레임 레이트 상수
+    // 정확한 프레임 레이트 상수 사용
     double ActualFrameRate = (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f)) ?
-        (30.0 * 1000.0 / 1001.0) : (60.0 * 1000.0 / 1001.0);
+        FRAMERATE_29_97 : FRAMERATE_59_94;
     int32 DropFrames = (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f)) ? 2 : 4;
 
     // 총 프레임 수 계산
     int64 TotalFrames = static_cast<int64>(TimeInSeconds * ActualFrameRate + 0.5); // 반올림
 
-    // 드롭 프레임 알고리즘에 필요한 상수
+    // SMPTE 표준에 따른 드롭 프레임 계산
+    int64 DropFramesPerMinute = DropFrames;
     int64 FramesPerMinute = static_cast<int64>(ActualFrameRate * 60.0);
-    int64 FramesPerHour = static_cast<int64>(ActualFrameRate * 3600.0);
+    int64 NonDropFramesPerMinute = FramesPerMinute - DropFramesPerMinute;
+    int64 FramesPerTenMinutes = (FramesPerMinute * 10) - (DropFramesPerMinute * 9);
 
-    // 드롭 프레임 보정
-    int64 TotalMinutes = TotalFrames / FramesPerMinute;
-    int64 FramesWithoutDrops = TotalMinutes * FramesPerMinute + (TotalFrames % FramesPerMinute);
+    // 프레임으로부터 시간 계산
+    int64 D = TotalFrames / FramesPerTenMinutes;
+    int64 M = TotalFrames % FramesPerTenMinutes;
 
-    // 10분의 배수가 아닌 모든 분에서 드롭 프레임 적용
-    int64 DroppedFrames = DropFrames * (TotalMinutes - TotalMinutes / 10);
-    int64 AdjustedFrames = FramesWithoutDrops + DroppedFrames;
+    // 드롭 프레임 조정
+    int64 AdjustedFrames;
 
-    // 수정된 프레임 수에서 시간, 분, 초, 프레임 계산
+    if (M < DropFramesPerMinute)
+    {
+        // 10분 경계에서 드롭 없음
+        AdjustedFrames = TotalFrames;
+    }
+    else
+    {
+        // 10분 내의 분에서 드롭 발생
+        M = M - DropFramesPerMinute;
+        int64 MinutesMod10 = M / NonDropFramesPerMinute;
+        M = M % NonDropFramesPerMinute;
+
+        AdjustedFrames = TotalFrames + (MinutesMod10 * DropFramesPerMinute) + DropFramesPerMinute;
+    }
+
+    // 최종 시간, 분, 초, 프레임 계산
+    int32 FramesPerHour = static_cast<int32>(ActualFrameRate * 3600);
+
     int32 Hours = static_cast<int32>(AdjustedFrames / FramesPerHour);
     AdjustedFrames %= FramesPerHour;
 
     int32 Minutes = static_cast<int32>(AdjustedFrames / FramesPerMinute);
     AdjustedFrames %= FramesPerMinute;
 
-    int32 Seconds = static_cast<int32>(AdjustedFrames / static_cast<int64>(ActualFrameRate));
-    int32 Frames = static_cast<int32>(AdjustedFrames % static_cast<int64>(ActualFrameRate));
+    int32 Seconds = static_cast<int32>(AdjustedFrames / static_cast<int32>(ActualFrameRate));
+    int32 Frames = static_cast<int32>(AdjustedFrames % static_cast<int32>(ActualFrameRate));
 
     // 드롭 프레임 타임코드 포맷 (세미콜론 사용)
     return FString::Printf(TEXT("%02d:%02d:%02d;%02d"), Hours, Minutes, Seconds, Frames);
