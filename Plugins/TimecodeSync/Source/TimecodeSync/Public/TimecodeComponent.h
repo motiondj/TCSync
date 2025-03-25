@@ -4,7 +4,12 @@
 #include "Components/ActorComponent.h"
 #include "TimecodeNetworkManager.h"
 #include "TimecodeNetworkTypes.h"
+#include "PLLSynchronizer.h"
+#include "SMPTETimecodeConverter.h"
 #include "TimecodeComponent.generated.h"
+
+class UPLLSynchronizer;
+class USMPTETimecodeConverter;
 
 // Delegate declaration for timecode change event
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeChanged, const FString&, NewTimecode);
@@ -17,6 +22,16 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkConnectionChanged, ENetwor
 
 // Delegate declaration for role change event
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRoleChanged, bool, IsMaster);
+
+// Define timecode operation modes
+UENUM(BlueprintType)
+enum class ETimecodeMode : uint8
+{
+    PLL_Only UMETA(DisplayName = "PLL Synchronization Only"),
+    SMPTE_Only UMETA(DisplayName = "SMPTE Timecode Only"),
+    Integrated UMETA(DisplayName = "PLL and SMPTE Integrated"),
+    Raw UMETA(DisplayName = "Raw Time (No Processing)")
+};
 
 /**
  * Component that provides timecode functionality when attached to an actor
@@ -136,6 +151,10 @@ public:
     // Role mode change event
     UPROPERTY(BlueprintAssignable, Category = "Timecode Role")
     FRoleModeChangedDelegate OnRoleModeChanged;
+
+    // Timecode operation mode
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode", meta = (DisplayName = "Timecode Mode"))
+    ETimecodeMode TimecodeMode = ETimecodeMode::Integrated;
 
 protected:
     // Called when component is initialized
@@ -261,6 +280,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Timecode Sync")
     void GetPLLStatus(float& OutFrequency, float& OutOffset) const;
 
+    // Set timecode operation mode
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode")
+    void SetTimecodeMode(ETimecodeMode NewMode);
+
+    // Get current timecode operation mode
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode")
+    ETimecodeMode GetTimecodeMode() const;
+
+    // Apply timecode mode settings
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode")
+    void ApplyTimecodeMode();
+
 private:
     // Elapsed time in seconds
     float ElapsedTimeSeconds;
@@ -304,4 +335,12 @@ private:
     // Network role mode change callback
     UFUNCTION()
     void OnNetworkRoleModeChanged(ETimecodeRoleMode NewMode);
+
+    // PLL Synchronizer sub-module
+    UPROPERTY()
+    UPLLSynchronizer* PLLSynchronizer;
+
+    // SMPTE Converter sub-module
+    UPROPERTY()
+    USMPTETimecodeConverter* SMPTEConverter;
 };

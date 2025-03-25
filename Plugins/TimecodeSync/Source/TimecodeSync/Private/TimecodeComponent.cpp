@@ -1,6 +1,10 @@
-﻿#include "TimecodeComponent.h"
+﻿// TimecodeComponent.cpp
+
+#include "TimecodeComponent.h"
 #include "TimecodeUtils.h"
 #include "TimecodeSettings.h"
+#include "PLLSynchronizer.h"
+#include "SMPTETimecodeConverter.h"
 #include "Engine/World.h"
 
 // Check if nDisplay module is included
@@ -57,6 +61,13 @@ UTimecodeComponent::UTimecodeComponent()
     SyncTimer = 0.0f;
     NetworkManager = nullptr;
     ConnectionState = ENetworkConnectionState::Disconnected;
+
+    // 타임코드 모드 기본 설정
+    TimecodeMode = ETimecodeMode::Integrated;
+
+    // 서브모듈 생성
+    PLLSynchronizer = CreateDefaultSubobject<UPLLSynchronizer>(TEXT("PLLSynchronizer"));
+    SMPTEConverter = CreateDefaultSubobject<USMPTETimecodeConverter>(TEXT("SMPTEConverter"));
 }
 
 void UTimecodeComponent::BeginPlay()
@@ -64,6 +75,12 @@ void UTimecodeComponent::BeginPlay()
     Super::BeginPlay();
 
     UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component initialized"), *GetOwner()->GetName());
+
+    // 서브모듈 초기화
+    if (PLLSynchronizer)
+    {
+        PLLSynchronizer->Initialize();
+    }
 
     // Determine role based on settings
     if (RoleMode == ETimecodeRoleMode::Automatic)
@@ -84,6 +101,9 @@ void UTimecodeComponent::BeginPlay()
 
     // Setup network
     SetupNetwork();
+
+    // 타임코드 모드 적용
+    ApplyTimecodeMode();
 
     // Auto start setting
     if (bAutoStart)
@@ -109,10 +129,39 @@ void UTimecodeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
     // Update timecode if running
     if (bIsRunning)
     {
+        // Update PLL even if not master (needed for smooth time adjustment)
+        if (bUsePLL && PLLSynchronizer && !bIsMaster)
+        {
+            PLLSynchronizer->Update(DeltaTime);
+        }
+
         // Update timecode only in master mode
         if (bIsMaster)
         {
-            UpdateTimecode(DeltaTime);
+            // 모드별 타임코드 업데이트 로직
+            switch (TimecodeMode)
+            {
+            case ETimecodeMode::Raw:
+                // 기본 시간 업데이트
+                ElapsedTimeSeconds += DeltaTime;
+                CurrentTimecode = FString::Printf(TEXT("%02d:%02d:%02d:%02d"),
+                    FMath::FloorToInt(ElapsedTimeSeconds / 3600.0f),
+                    FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds / 60.0f, 60.0f)),
+                    FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds, 60.0f)),
+                    FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds * FrameRate, FrameRate)));
+
+                // 타임코드 변경 이벤트 발생
+                OnTimecodeChanged.Broadcast(CurrentTimecode);
+                break;
+
+            case ETimecodeMode::SMPTE_Only:
+            case ETimecodeMode::PLL_Only:
+            case ETimecodeMode::Integrated:
+            default:
+                // 기본 타임코드 업데이트 (SMPTE 변환 포함)
+                UpdateTimecode(DeltaTime);
+                break;
+            }
         }
 
         // Check events for both master and slave
@@ -154,7 +203,14 @@ void UTimecodeComponent::ResetTimecode()
     ElapsedTimeSeconds = 0.0f;
 
     // Update timecode string
-    CurrentTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
+    if (SMPTEConverter)
+    {
+        CurrentTimecode = SMPTEConverter->SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
+    }
+    else
+    {
+        CurrentTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
+    }
 
     // Reset event trigger states
     TriggeredEvents.Empty();
@@ -450,8 +506,18 @@ void UTimecodeComponent::UpdateTimecode(float DeltaTime)
     // Update elapsed time
     ElapsedTimeSeconds += DeltaTime;
 
-    // Generate timecode
-    FString NewTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
+    // Generate timecode using SMPTE converter module
+    FString NewTimecode;
+
+    if (SMPTEConverter)
+    {
+        NewTimecode = SMPTEConverter->SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
+    }
+    else
+    {
+        // Fallback to direct function call
+        NewTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, bUseDropFrameTimecode);
+    }
 
     // Trigger event if timecode changed
     if (NewTimecode != CurrentTimecode)
@@ -571,18 +637,36 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             {
                 CurrentTimecode = Message.Timecode;
 
-                // Convert timecode string to seconds
-                ElapsedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
+                // Convert timecode string to seconds using SMPTE module
+                float ReceivedTimeSeconds;
 
-                // Apply any PLL correction to local time
-                if (bUsePLL && NetworkManager)
+                if (SMPTEConverter)
                 {
-                    // 실시간 PLL 상태 로깅 (상세 디버그용)
+                    ReceivedTimeSeconds = SMPTEConverter->TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
+                }
+                else
+                {
+                    // Fallback to direct function call
+                    ReceivedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
+                }
+
+                // Apply PLL correction to local time if enabled
+                if (bUsePLL && PLLSynchronizer)
+                {
+                    // Process local time through PLL
+                    ElapsedTimeSeconds = PLLSynchronizer->ProcessTime(ElapsedTimeSeconds, ReceivedTimeSeconds, GetWorld()->GetDeltaSeconds());
+
+                    // Get PLL status for logging
                     double Phase, Frequency, Offset;
-                    NetworkManager->GetPLLStatus(Phase, Frequency, Offset);
+                    PLLSynchronizer->GetStatus(Phase, Frequency, Offset);
 
                     UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] PLL Correction - Freq: %.6f, Offset: %.3fms"),
                         *GetOwner()->GetName(), Frequency, Offset * 1000.0);
+                }
+                else
+                {
+                    // Without PLL, directly use the received time
+                    ElapsedTimeSeconds = ReceivedTimeSeconds;
                 }
 
                 // Trigger timecode change event
@@ -694,6 +778,13 @@ void UTimecodeComponent::LogDebugInfo()
     UE_LOG(LogTimecodeComponent, Display, TEXT("Current Timecode: %s"), *CurrentTimecode);
     UE_LOG(LogTimecodeComponent, Display, TEXT("Elapsed Time: %.3f seconds"), ElapsedTimeSeconds);
 
+    // 타임코드 모드 정보 추가
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Timecode Mode: %s"),
+        TimecodeMode == ETimecodeMode::PLL_Only ? TEXT("PLL Only") :
+        TimecodeMode == ETimecodeMode::SMPTE_Only ? TEXT("SMPTE Only") :
+        TimecodeMode == ETimecodeMode::Integrated ? TEXT("Integrated") :
+        TEXT("Raw"));
+
     // Role info
     UE_LOG(LogTimecodeComponent, Display, TEXT("Role Mode: %s"),
         (RoleMode == ETimecodeRoleMode::Automatic) ? TEXT("Automatic") : TEXT("Manual"));
@@ -738,7 +829,36 @@ void UTimecodeComponent::LogDebugInfo()
         UE_LOG(LogTimecodeComponent, Display, TEXT("Network Manager: Invalid/Null"));
     }
 
-    UE_LOG(LogTimecodeComponent, Display, TEXT("========================================="));
+    // 모듈 상태 정보 추가
+    UE_LOG(LogTimecodeComponent, Display, TEXT("=========================================="));
+    UE_LOG(LogTimecodeComponent, Display, TEXT("Module Status:"));
+
+    if (PLLSynchronizer)
+    {
+        double Phase, Frequency, Offset;
+        PLLSynchronizer->GetStatus(Phase, Frequency, Offset);
+
+        UE_LOG(LogTimecodeComponent, Display, TEXT("PLL Module: Valid"));
+        UE_LOG(LogTimecodeComponent, Display, TEXT("  Enabled: %s"), bUsePLL ? TEXT("Yes") : TEXT("No"));
+        UE_LOG(LogTimecodeComponent, Display, TEXT("  Bandwidth: %.3f, Damping: %.3f"), PLLBandwidth, PLLDamping);
+        UE_LOG(LogTimecodeComponent, Display, TEXT("  Status - Frequency: %.6f, Offset: %.3fms, Error: %.3fms"),
+            Frequency, Offset * 1000.0, Phase * 1000.0);
+    }
+    else
+    {
+        UE_LOG(LogTimecodeComponent, Display, TEXT("PLL Module: Invalid/Null"));
+    }
+
+    if (SMPTEConverter)
+    {
+        UE_LOG(LogTimecodeComponent, Display, TEXT("SMPTE Module: Valid"));
+    }
+    else
+    {
+        UE_LOG(LogTimecodeComponent, Display, TEXT("SMPTE Module: Invalid/Null"));
+    }
+
+    UE_LOG(LogTimecodeComponent, Display, TEXT("=========================================="));
 
     // PLL 정보 추가
     UE_LOG(LogTimecodeComponent, Display, TEXT("PLL Enabled: %s"), bUsePLL ? TEXT("Yes") : TEXT("No"));
@@ -756,7 +876,65 @@ void UTimecodeComponent::LogDebugInfo()
     UE_LOG(LogTimecodeComponent, Display, TEXT("========================================="));
 }
 
-// TimecodeComponent.cpp 파일 끝에 추가
+// TimecodeComponent.cpp 파일 끝에 추가할 새로운 함수들
+
+void UTimecodeComponent::SetTimecodeMode(ETimecodeMode NewMode)
+{
+    if (TimecodeMode != NewMode)
+    {
+        ETimecodeMode OldMode = TimecodeMode;
+        TimecodeMode = NewMode;
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode mode changed from %d to %d"),
+            *GetOwner()->GetName(), (int32)OldMode, (int32)TimecodeMode);
+
+        // 새 모드 적용
+        ApplyTimecodeMode();
+    }
+}
+
+ETimecodeMode UTimecodeComponent::GetTimecodeMode() const
+{
+    return TimecodeMode;
+}
+
+void UTimecodeComponent::ApplyTimecodeMode()
+{
+    // 모드에 따라 컴포넌트 설정 변경
+    switch (TimecodeMode)
+    {
+    case ETimecodeMode::PLL_Only:
+        bUsePLL = true;
+        bUseDropFrameTimecode = false;
+        break;
+
+    case ETimecodeMode::SMPTE_Only:
+        bUsePLL = false;
+        bUseDropFrameTimecode = true;
+        break;
+
+    case ETimecodeMode::Integrated:
+        bUsePLL = true;
+        bUseDropFrameTimecode = true;
+        break;
+
+    case ETimecodeMode::Raw:
+        bUsePLL = false;
+        bUseDropFrameTimecode = false;
+        break;
+    }
+
+    // 네트워크 매니저에 PLL 설정 적용
+    if (NetworkManager)
+    {
+        NetworkManager->SetUsePLL(bUsePLL);
+    }
+
+    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Applied timecode mode: %d, PLL: %s, DropFrame: %s"),
+        *GetOwner()->GetName(), (int32)TimecodeMode,
+        bUsePLL ? TEXT("Enabled") : TEXT("Disabled"),
+        bUseDropFrameTimecode ? TEXT("Enabled") : TEXT("Disabled"));
+}
 
 void UTimecodeComponent::SetUsePLL(bool bInUsePLL)
 {
@@ -785,6 +963,13 @@ void UTimecodeComponent::SetPLLParameters(float Bandwidth, float Damping)
     PLLBandwidth = FMath::Clamp(Bandwidth, 0.01f, 1.0f);
     PLLDamping = FMath::Clamp(Damping, 0.1f, 2.0f);
 
+    // PLL 모듈에 설정 적용
+    if (PLLSynchronizer)
+    {
+        PLLSynchronizer->SetParameters(PLLBandwidth, PLLDamping);
+    }
+
+    // 네트워크 매니저에도 설정 적용
     if (NetworkManager)
     {
         NetworkManager->SetPLLParameters(PLLBandwidth, PLLDamping);
@@ -802,8 +987,17 @@ void UTimecodeComponent::GetPLLParameters(float& OutBandwidth, float& OutDamping
 
 void UTimecodeComponent::GetPLLStatus(float& OutFrequency, float& OutOffset) const
 {
-    if (NetworkManager)
+    if (PLLSynchronizer)
     {
+        double Phase, Frequency, Offset;
+        PLLSynchronizer->GetStatus(Phase, Frequency, Offset);
+
+        OutFrequency = (float)Frequency;
+        OutOffset = (float)Offset;
+    }
+    else if (NetworkManager)
+    {
+        // Fallback to network manager
         double Phase, Frequency, Offset;
         NetworkManager->GetPLLStatus(Phase, Frequency, Offset);
 
