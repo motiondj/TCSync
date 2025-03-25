@@ -1010,3 +1010,4 @@ void UTimecodeComponent::GetPLLStatus(float& OutFrequency, float& OutOffset) con
         OutOffset = 0.0f;
     }
 }
+
