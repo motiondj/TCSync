@@ -34,6 +34,7 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , PLLOffset(0.0)              // 초기 오프셋
     , LastMasterTimestamp(0.0)    // 마지막 마스터 타임스탬프
     , LastLocalTimestamp(0.0)     // 마지막 로컬 타임스탬프
+    , bIsDedicatedMaster(false)  // 새로 추가한 부분
 {
     // Basic initialization complete
     UE_LOG(LogTimecodeNetwork, Verbose, TEXT("TimecodeNetworkManager created with ID: %s"), *InstanceID);
@@ -47,6 +48,15 @@ UTimecodeNetworkManager::~UTimecodeNetworkManager()
 
 bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 {
+    // 전용 마스터 모드가 활성화되면 항상 마스터로 설정
+    if (bIsDedicatedMaster)
+    {
+        bIsMaster = true;
+        RoleMode = ETimecodeRoleMode::Manual;
+        bIsManuallyMaster = true;
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Running in dedicated master server mode"));
+    }
+
     // Shutdown if already initialized
     if (Socket != nullptr || Receiver != nullptr)
     {
@@ -950,4 +960,36 @@ double UTimecodeNetworkManager::GetPLLCorrectedTime(double LocalTime) const
     double CorrectedTime = LastMasterTimestamp + (ElapsedSinceLastUpdate * PLLFrequency);
 
     return CorrectedTime;
+}
+
+void UTimecodeNetworkManager::SetDedicatedMaster(bool bInIsDedicatedMaster)
+{
+    if (bIsDedicatedMaster != bInIsDedicatedMaster)
+    {
+        bIsDedicatedMaster = bInIsDedicatedMaster;
+
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Dedicated master mode %s"),
+            bIsDedicatedMaster ? TEXT("enabled") : TEXT("disabled"));
+
+        // 전용 마스터 모드가 활성화되면 항상 마스터 역할 수행
+        if (bIsDedicatedMaster)
+        {
+            // 역할 수동 설정으로 변경하고 마스터로 설정
+            SetRoleMode(ETimecodeRoleMode::Manual);
+            SetManualMaster(true);
+
+            // 네트워크가 이미 초기화된 경우 재초기화
+            if (Socket != nullptr)
+            {
+                int32 CurrentPort = PortNumber;
+                Shutdown();
+                Initialize(true, CurrentPort);
+            }
+        }
+    }
+}
+
+bool UTimecodeNetworkManager::IsDedicatedMaster() const
+{
+    return bIsDedicatedMaster;
 }

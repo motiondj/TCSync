@@ -36,6 +36,7 @@ UTimecodeComponent::UTimecodeComponent()
     bIsManuallyMaster = Settings ? Settings->bIsManualMaster : false;
     MasterIPAddress = Settings ? Settings->MasterIPAddress : TEXT("");
     bUseNDisplay = Settings ? Settings->bEnableNDisplayIntegration : false;
+    bIsDedicatedMaster = Settings ? Settings->bIsDedicatedMaster : false;
 
     // Initialize timecode-related settings
     FrameRate = Settings ? Settings->FrameRate : 30.0f;
@@ -306,6 +307,9 @@ bool UTimecodeComponent::SetupNetwork()
                 NetworkManager->SetMasterIPAddress(MasterIPAddress);
             }
         }
+
+        // 여기에 추가: 전용 마스터 설정 적용
+        NetworkManager->SetDedicatedMaster(bIsDedicatedMaster);
 
         // Apply PLL settings
         NetworkManager->SetUsePLL(bUsePLL);
@@ -1011,3 +1015,32 @@ void UTimecodeComponent::GetPLLStatus(float& OutFrequency, float& OutOffset) con
     }
 }
 
+void UTimecodeComponent::SetDedicatedMaster(bool bInIsDedicatedMaster)
+{
+    if (bIsDedicatedMaster != bInIsDedicatedMaster)
+    {
+        bIsDedicatedMaster = bInIsDedicatedMaster;
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Dedicated master mode %s"),
+            *GetOwner()->GetName(), bIsDedicatedMaster ? TEXT("enabled") : TEXT("disabled"));
+
+        // 네트워크 매니저에 설정 적용
+        if (NetworkManager)
+        {
+            NetworkManager->SetDedicatedMaster(bIsDedicatedMaster);
+        }
+
+        // 전용 마스터 모드가 활성화되면 역할 설정 업데이트
+        if (bIsDedicatedMaster)
+        {
+            // 수동 모드로 변경하고 마스터로 설정
+            SetRoleMode(ETimecodeRoleMode::Manual);
+            SetManualMaster(true);
+        }
+    }
+}
+
+bool UTimecodeComponent::GetIsDedicatedMaster() const
+{
+    return bIsDedicatedMaster;
+}

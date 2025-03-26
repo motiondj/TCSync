@@ -62,6 +62,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Manual && !bIsManuallyMaster", EditConditionHides))
     FString MasterIPAddress;
 
+    // 전용 타임코드 마스터 서버 모드
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (DisplayName = "Dedicated Master Server"))
+    bool bIsDedicatedMaster;
+
     // Whether to use nDisplay (only in automatic mode)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode Role", meta = (EditCondition = "RoleMode==ETimecodeRoleMode::Automatic", EditConditionHides))
     bool bUseNDisplay;
@@ -262,6 +266,13 @@ public:
     // Log detailed debug information about the timecode component
     UFUNCTION(BlueprintCallable, Category = "Timecode|Debug")
     void LogDebugInfo();
+
+    // 전용 마스터 모드 설정/조회
+    UFUNCTION(BlueprintCallable, Category = "Timecode Role")
+    void SetDedicatedMaster(bool bInIsDedicatedMaster);
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Role")
+    bool GetIsDedicatedMaster() const;
 
     // PLL 설정 메서드
     UFUNCTION(BlueprintCallable, Category = "Timecode Sync")

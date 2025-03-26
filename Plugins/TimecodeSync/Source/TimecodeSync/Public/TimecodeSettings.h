@@ -78,6 +78,10 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "Advanced")
     bool bEnableNetworkLatencyCompensation;
 
+    // 전용 타임코드 마스터 서버 설정
+    UPROPERTY(config, EditAnywhere, Category = "Advanced", meta = (DisplayName = "Dedicated Master Server"))
+    bool bIsDedicatedMaster;
+
     // Connection status check interval (in seconds)
     UPROPERTY(config, EditAnywhere, Category = "Advanced", meta = (ClampMin = "0.1", ClampMax = "10.0"))
     float ConnectionCheckInterval;

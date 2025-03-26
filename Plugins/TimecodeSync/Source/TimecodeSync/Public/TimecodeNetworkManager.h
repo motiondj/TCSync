@@ -133,6 +133,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Network")
     int32 GetTargetPort() const;
 
+    // 전용 마스터 기능 설정/조회
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void SetDedicatedMaster(bool bInIsDedicatedMaster);
+
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool IsDedicatedMaster() const;
+
     // PLL 설정 메서드
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetUsePLL(bool bInUsePLL);
@@ -210,6 +217,9 @@ private:
 
     // 대상 포트 번호
     int32 TargetPortNumber;
+
+    // 전용 마스터 서버 관련 변수들
+    bool bIsDedicatedMaster;   // 전용 마스터 서버 여부
 
     // PLL 설정
     bool bUsePLL;

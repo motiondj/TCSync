@@ -328,6 +328,74 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateRoleSettingsSection()
                                 ]
                         ]
                 ]
+
+                // 여기에 전용 마스터 서버 옵션 추가
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+
+                        // 레이블
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("DedicatedMaster", "Dedicated Master:"))
+                                .MinDesiredWidth(120)
+                                .ToolTipText(LOCTEXT("DedicatedMasterTooltip", "When enabled, this device will act as a dedicated timecode master server"))
+                        ]
+
+                        // 체크박스
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        [
+                            SNew(SCheckBox)
+                                .IsChecked_Lambda([this]()
+                                    {
+                                        UTimecodeSettings* Settings = GetTimecodeSettings();
+                                        return Settings && Settings->bIsDedicatedMaster ?
+                                            ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+                                    })
+                                .OnCheckStateChanged_Lambda([this](ECheckBoxState NewState)
+                                    {
+                                        UTimecodeSettings* Settings = GetTimecodeSettings();
+                                        if (Settings)
+                                        {
+                                            Settings->bIsDedicatedMaster = (NewState == ECheckBoxState::Checked);
+
+                                            // 전용 마스터가 활성화되면 자동으로 수동 마스터 모드로 설정
+                                            if (Settings->bIsDedicatedMaster)
+                                            {
+                                                Settings->RoleMode = ETimecodeRoleMode::Manual;
+                                                Settings->bIsManualMaster = true;
+                                            }
+
+                                            SaveSettings();
+
+                                            // 타임코드 매니저에 설정 적용 (이미 초기화된 경우)
+                                            if (TimecodeManager)
+                                            {
+                                                TimecodeManager->SetDedicatedMaster(Settings->bIsDedicatedMaster);
+                                            }
+                                        }
+                                    })
+                        ]
+
+                        // 설명 텍스트
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        .VAlign(VAlign_Center)
+                        .Padding(5, 0, 0, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("DedicatedMasterLabel", "Enable Dedicated Master Server"))
+                                .Font(FCoreStyle::GetDefaultFontStyle("Regular", 9))
+                                .ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)))
+                        ]
+                ]
         ];
 }
 

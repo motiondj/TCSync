@@ -23,11 +23,15 @@ UTimecodeSettings::UTimecodeSettings()
     bEnablePacketLossCompensation = true;
     bEnableNetworkLatencyCompensation = true;
     ConnectionCheckInterval = 1.0f;
+    
 
     // PLL 설정 초기화
     bEnablePLL = true;
     PLLBandwidth = 0.1f;
     PLLDamping = 1.0f;
+
+    // 기본적으로 전용 마스터 비활성화
+    bIsDedicatedMaster = false;  
 }
 
 FName UTimecodeSettings::GetCategoryName() const
