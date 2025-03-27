@@ -67,6 +67,11 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
     // 먼저 포트 번호 설정 (이 부분이 중요합니다)
     PortNumber = Port;
 
+    // Send Port는 기본적으로 Receive Port + 1
+    if (TargetPortNumber == 0)  // 타겟 포트가 설정되지 않은 경우만
+    {
+        TargetPortNumber = Port + 1;
+    }
 
     // Determine role
     if (RoleMode == ETimecodeRoleMode::Automatic)
@@ -975,6 +980,7 @@ void UTimecodeNetworkManager::SetDedicatedMaster(bool bInIsDedicatedMaster)
         if (bIsDedicatedMaster)
         {
             // 역할 수동 설정으로 변경하고 마스터로 설정
+            // 이 부분이 핵심입니다
             SetRoleMode(ETimecodeRoleMode::Manual);
             SetManualMaster(true);
 
