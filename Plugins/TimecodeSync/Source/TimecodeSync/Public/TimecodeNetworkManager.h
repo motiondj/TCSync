@@ -171,7 +171,7 @@ private:
     FString InstanceID;
 
     // Port number
-    int32 PortNumber;
+    int32 ReceivePortNumber;
 
     // Target IP address
     FString TargetIPAddress;
@@ -216,7 +216,7 @@ private:
     bool bHasReceivedValidMessage = false;
 
     // 대상 포트 번호
-    int32 TargetPortNumber;
+    int32 SendPortNumber;
 
     // 전용 마스터 서버 관련 변수들
     bool bIsDedicatedMaster;   // 전용 마스터 서버 여부

@@ -17,13 +17,14 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , Receiver(nullptr)
     , ConnectionState(ENetworkConnectionState::Disconnected)
     , InstanceID(FGuid::NewGuid().ToString())
-    , PortNumber(10000)
+    , ReceivePortNumber(10000)
     , TargetIPAddress(TEXT("127.0.0.1"))
     , MulticastGroupAddress(TEXT("239.0.0.1"))
     , bIsMasterMode(false)
     , RoleMode(ETimecodeRoleMode::Automatic)
     , bIsManuallyMaster(false)
     , MasterIPAddress(TEXT(""))
+    , SendPortNumber(10001)
     , bRoleAutomaticallyDetermined(true)
     , bHasReceivedValidMessage(false)
     , bUsePLL(true)                // PLL 기본적으로 활성화
@@ -65,12 +66,12 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
     }
 
     // 먼저 포트 번호 설정 (이 부분이 중요합니다)
-    PortNumber = Port;
+    ReceivePortNumber = Port;
 
     // Send Port는 기본적으로 Receive Port + 1
-    if (TargetPortNumber == 0)  // 타겟 포트가 설정되지 않은 경우만
+    if (SendPortNumber == 0)  // 타겟 포트가 설정되지 않은 경우만
     {
-        TargetPortNumber = Port + 1;
+        SendPortNumber = Port + 1;
     }
 
     // Determine role
@@ -187,12 +188,11 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
-        TargetAddr->SetPort(TargetPortNumber);
+        TargetAddr->SetPort(SendPortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message directly to Master: %s"),
-            *UEnum::GetValueAsString(MessageType), *MasterIPAddress);
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message directly to Master: %s (Port: %d)"),
+            *UEnum::GetValueAsString(MessageType), *MasterIPAddress, SendPortNumber);  // 로그에 포트 번호 추가
     }
     // Use unicast if target IP is set
     else if (!TargetIPAddress.IsEmpty())
@@ -207,8 +207,7 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
-        TargetAddr->SetPort(TargetPortNumber);
+        TargetAddr->SetPort(SendPortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to target: %s"),
@@ -228,7 +227,7 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
         }
 
         // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
-        MulticastAddr->SetPort(TargetPortNumber);
+        MulticastAddr->SetPort(ReceivePortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to multicast group: %s"),
@@ -277,7 +276,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid multicast group: %s"), *MulticastGroupAddress);
             return false;
         }
-        MulticastAddr->SetPort(TargetPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
+        MulticastAddr->SetPort(SendPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
@@ -295,7 +294,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid target IP: %s"), *TargetIPAddress);
             return false;
         }
-        TargetAddr->SetPort(TargetPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
+        TargetAddr->SetPort(SendPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
@@ -313,7 +312,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid master IP: %s"), *MasterIPAddress);
             return false;
         }
-        MasterAddr->SetPort(TargetPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
+        MasterAddr->SetPort(SendPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MasterAddr);
 
@@ -369,7 +368,7 @@ void UTimecodeNetworkManager::SetRoleMode(ETimecodeRoleMode NewMode)
         if (bOldMasterMode != bIsMasterMode && Socket != nullptr)
         {
             UE_LOG(LogTimecodeNetwork, Log, TEXT("Role changed, reinitializing network..."));
-            int32 OldPort = PortNumber;
+            int32 OldPort = ReceivePortNumber;
             Shutdown();
             Initialize(bIsMasterMode, OldPort);
         }
@@ -403,7 +402,7 @@ void UTimecodeNetworkManager::SetManualMaster(bool bInIsManuallyMaster)
             if (bOldMasterMode != bIsMasterMode && Socket != nullptr)
             {
                 UE_LOG(LogTimecodeNetwork, Log, TEXT("Master role changed, reinitializing network..."));
-                int32 OldPort = PortNumber;
+                int32 OldPort = ReceivePortNumber;
                 Shutdown();
                 Initialize(bIsMasterMode, OldPort);
             }
@@ -501,17 +500,17 @@ bool UTimecodeNetworkManager::CreateSocket()
     // Set local address
     TSharedRef<FInternetAddr> LocalAddr = SocketSubsystem->CreateInternetAddr();
     LocalAddr->SetAnyAddress();
-    LocalAddr->SetPort(PortNumber);
+    LocalAddr->SetPort(ReceivePortNumber);  // 이름 변경
 
     if (!Socket->Bind(*LocalAddr))
     {
-        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to bind socket to port %d"), PortNumber);
+        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to bind socket to port %d"), ReceivePortNumber);  // 이름 변경
         SocketSubsystem->DestroySocket(Socket);
         Socket = nullptr;
         return false;
     }
 
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("UDP socket created and bound to port %d"), PortNumber);
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("UDP socket created and bound to receive port %d"), ReceivePortNumber);  // 이름 변경 및 주석 명확화
     return true;
 }
 
@@ -660,10 +659,10 @@ bool UTimecodeNetworkManager::AutoDetectRole()
     {
         // 테스트 환경을 위한 단순한 규칙:
         // 포트 번호가 10000이면 마스터, 그 외에는 슬레이브
-        bool bIsMaster = (PortNumber == 10000);
+        bool bIsMaster = (ReceivePortNumber == 10000);  // 이름 변경
 
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Auto-detected role based on port number: %s (Port: %d)"),
-            bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"), PortNumber);
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Auto-detected role based on port number: %s (Receive Port: %d)"),
+            bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"), ReceivePortNumber);  // 이름 변경 및 명확한 표현
 
         return bIsMaster;
     }
@@ -816,13 +815,13 @@ bool UTimecodeNetworkManager::TestPacketLossHandling(float SimulatedPacketLossRa
 
 void UTimecodeNetworkManager::SetTargetPort(int32 Port)
 {
-    TargetPortNumber = Port;
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("Target port set to: %d"), TargetPortNumber);
+    SendPortNumber = Port;  // 이름 변경
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("Send port set to: %d"), SendPortNumber);  // 이름 변경
 }
 
 int32 UTimecodeNetworkManager::GetTargetPort() const
 {
-    return TargetPortNumber;
+    return SendPortNumber;  // 이름 변경
 }
 
 void UTimecodeNetworkManager::SetUsePLL(bool bInUsePLL)
@@ -987,7 +986,7 @@ void UTimecodeNetworkManager::SetDedicatedMaster(bool bInIsDedicatedMaster)
             // 네트워크가 이미 초기화된 경우 재초기화
             if (Socket != nullptr)
             {
-                int32 CurrentPort = PortNumber;
+                int32 CurrentPort = ReceivePortNumber;
                 Shutdown();
                 Initialize(true, CurrentPort);
             }
