@@ -188,11 +188,11 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        TargetAddr->SetPort(SendPortNumber);
+        TargetAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message directly to Master: %s (Port: %d)"),
-            *UEnum::GetValueAsString(MessageType), *MasterIPAddress, SendPortNumber);  // 로그에 포트 번호 추가
+            *UEnum::GetValueAsString(MessageType), *MasterIPAddress, SendPortNumber);
     }
     // Use unicast if target IP is set
     else if (!TargetIPAddress.IsEmpty())
@@ -207,11 +207,11 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        TargetAddr->SetPort(SendPortNumber);
+        TargetAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to target: %s"),
-            *UEnum::GetValueAsString(MessageType), *TargetIPAddress);
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to target: %s (Port: %d)"),
+            *UEnum::GetValueAsString(MessageType), *TargetIPAddress, SendPortNumber);
     }
     // Use multicast if multicast group is set
     else if (!MulticastGroupAddress.IsEmpty())
@@ -226,11 +226,11 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        MulticastAddr->SetPort(SendPortNumber);
+        MulticastAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to multicast group: %s"),
-            *UEnum::GetValueAsString(MessageType), *MulticastGroupAddress);
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to multicast group: %s (Port: %d)"),
+            *UEnum::GetValueAsString(MessageType), *MulticastGroupAddress, SendPortNumber);
     }
     else
     {
@@ -275,12 +275,12 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid multicast group: %s"), *MulticastGroupAddress);
             return false;
         }
-        MulticastAddr->SetPort(SendPortNumber);
+        MulticastAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent event '%s' to multicast group: %s"),
-            *EventName, *MulticastGroupAddress);
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent event '%s' to multicast group: %s (Port: %d)"),
+            *EventName, *MulticastGroupAddress, SendPortNumber);
     }
     else if (!TargetIPAddress.IsEmpty())
     {
@@ -293,12 +293,12 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid target IP: %s"), *TargetIPAddress);
             return false;
         }
-        TargetAddr->SetPort(SendPortNumber);
+        TargetAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent event '%s' to target: %s"),
-            *EventName, *TargetIPAddress);
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent event '%s' to target: %s (Port: %d)"),
+            *EventName, *TargetIPAddress, SendPortNumber);
     }
     else if (RoleMode == ETimecodeRoleMode::Manual && !bIsMasterMode && !MasterIPAddress.IsEmpty())
     {
@@ -311,12 +311,12 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid master IP: %s"), *MasterIPAddress);
             return false;
         }
-        MasterAddr->SetPort(SendPortNumber);
+        MasterAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MasterAddr);
 
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent event '%s' to master: %s"),
-            *EventName, *MasterIPAddress);
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent event '%s' to master: %s (Port: %d)"),
+            *EventName, *MasterIPAddress, SendPortNumber);
     }
     else
     {
@@ -1029,8 +1029,11 @@ bool UTimecodeNetworkManager::SendModeChangeCommand(ETimecodeMode NewMode)
         MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
         if (bIsValid)
         {
-            MulticastAddr->SetPort(SendPortNumber);
+            MulticastAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
             bSuccess = Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
+
+            UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent mode change command to multicast group: %s (Port: %d)"),
+                *MulticastGroupAddress, SendPortNumber);
         }
     }
     else if (!TargetIPAddress.IsEmpty())
@@ -1041,8 +1044,11 @@ bool UTimecodeNetworkManager::SendModeChangeCommand(ETimecodeMode NewMode)
         TargetAddr->SetIp(*TargetIPAddress, bIsValid);
         if (bIsValid)
         {
-            TargetAddr->SetPort(SendPortNumber);
+            TargetAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
             bSuccess = Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
+
+            UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent mode change command to target: %s (Port: %d)"),
+                *TargetIPAddress, SendPortNumber);
         }
     }
 

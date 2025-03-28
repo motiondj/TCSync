@@ -472,12 +472,13 @@ void UTimecodeSyncLogicTest::OnSystemTimeReceived(const FTimecodeNetworkMessage&
 void UTimecodeSyncLogicTest::LogTestResult(const FString& TestName, bool bSuccess, const FString& Message)
 {
     FString ResultStr = bSuccess ? TEXT("PASSED") : TEXT("FAILED");
+    /*
     // Output to both regular log and screen message
     UE_LOG(LogTemp, Display, TEXT("=============================="));
     UE_LOG(LogTemp, Display, TEXT("[TimecodeSyncTest] %s: %s"), *TestName, *ResultStr);
     UE_LOG(LogTemp, Display, TEXT("%s"), *Message);
     UE_LOG(LogTemp, Display, TEXT("=============================="));
-
+    */
     // Display message on screen (useful during development)
     if (GEngine)
     {
