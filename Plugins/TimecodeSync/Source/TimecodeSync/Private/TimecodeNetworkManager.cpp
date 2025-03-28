@@ -226,8 +226,7 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
             return false;
         }
 
-        // 여기를 수정 - PortNumber를 TargetPortNumber로 변경
-        MulticastAddr->SetPort(ReceivePortNumber);
+        MulticastAddr->SetPort(SendPortNumber);
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
         UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to multicast group: %s"),
@@ -276,7 +275,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid multicast group: %s"), *MulticastGroupAddress);
             return false;
         }
-        MulticastAddr->SetPort(SendPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
+        MulticastAddr->SetPort(SendPortNumber);
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
 
@@ -294,7 +293,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid target IP: %s"), *TargetIPAddress);
             return false;
         }
-        TargetAddr->SetPort(SendPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
+        TargetAddr->SetPort(SendPortNumber);
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
 
@@ -312,7 +311,7 @@ bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const F
             UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid master IP: %s"), *MasterIPAddress);
             return false;
         }
-        MasterAddr->SetPort(SendPortNumber);  // 수정 필요: PortNumber를 TargetPortNumber로 변경
+        MasterAddr->SetPort(SendPortNumber);
 
         Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MasterAddr);
 

@@ -15,16 +15,6 @@ UTimecodeSyncLogicTest::UTimecodeSyncLogicTest()
 
 bool UTimecodeSyncLogicTest::TestMasterSlaveSync(float Duration)
 {
-    // 테스트 체크리스트 진행을 위한 임시 코드
-    UE_LOG(LogTemp, Warning, TEXT("[TimecodeSyncTest] Using temporary test implementation"));
-    UE_LOG(LogTemp, Warning, TEXT("[TimecodeSyncTest] In the actual implementation, SendTimecodeMessage should use TargetPortNumber instead of PortNumber"));
-
-    // 테스트를 성공으로 표시
-    LogTestResult(TEXT("Master/Slave Sync"), true, TEXT("Test temporarily marked as successful. Requires port handling fix in actual implementation."));
-    return true;
-
-    /*
-    // 실제 구현 코드 - 나중에 사용
     bool bSuccess = false;
     FString ResultMessage;
 
@@ -156,7 +146,7 @@ bool UTimecodeSyncLogicTest::TestMasterSlaveSync(float Duration)
 
         // Check if slave received the timecode
         bool bTimecodeMatch = !CurrentSlaveTimecode.IsEmpty() &&
-                             (CurrentSlaveTimecode == TestTimecode);
+            (CurrentSlaveTimecode == TestTimecode);
         SyncResults.Add(bTimecodeMatch);
 
         UE_LOG(LogTemp, Display, TEXT("[TimecodeSyncTest] Sample %d: Master = %s, Slave = %s, Match = %s"),
@@ -190,7 +180,6 @@ bool UTimecodeSyncLogicTest::TestMasterSlaveSync(float Duration)
 
     LogTestResult(TEXT("Master/Slave Sync"), bSuccess, ResultMessage);
     return bSuccess;
-    */
 }
 
 bool UTimecodeSyncLogicTest::TestMultipleFrameRates()
