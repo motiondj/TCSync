@@ -61,6 +61,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Network")
     bool SendEventMessage(const FString& EventName, const FString& Timecode);
 
+    // 타임코드 모드 변경 명령 전송
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    bool SendModeChangeCommand(ETimecodeMode NewMode);
+
     // Set target IP
     UFUNCTION(BlueprintCallable, Category = "Network")
     void SetTargetIP(const FString& IPAddress);

@@ -23,6 +23,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNetworkConnectionChanged, ENetwor
 // Delegate declaration for role change event
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRoleChanged, bool, IsMaster);
 
+// TimecodeMode 변경 이벤트를 위한 델리게이트 선언
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeModeChanged, ETimecodeMode, NewMode);
+
 // Define timecode operation modes
 UENUM(BlueprintType)
 enum class ETimecodeMode : uint8
@@ -155,6 +158,10 @@ public:
     // Role mode change event
     UPROPERTY(BlueprintAssignable, Category = "Timecode Role")
     FRoleModeChangedDelegate OnRoleModeChanged;
+
+    // 타임코드 모드 변경 이벤트
+    UPROPERTY(BlueprintAssignable, Category = "Timecode Mode")
+    FOnTimecodeModeChanged OnTimecodeModeChanged;
 
     // Timecode operation mode
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timecode", meta = (DisplayName = "Timecode Mode"))
@@ -302,6 +309,19 @@ public:
     // Apply timecode mode settings
     UFUNCTION(BlueprintCallable, Category = "Timecode Mode")
     void ApplyTimecodeMode();
+
+    // 모드별 타임코드 계산 함수
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode", meta = (DisplayName = "Update Raw Timecode"))
+    void UpdateRawTimecode(float DeltaTime);
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode", meta = (DisplayName = "Update PLL Timecode"))
+    void UpdatePLLTimecode(float DeltaTime);
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode", meta = (DisplayName = "Update SMPTE Timecode"))
+    void UpdateSMPTETimecode(float DeltaTime);
+
+    UFUNCTION(BlueprintCallable, Category = "Timecode Mode", meta = (DisplayName = "Update Integrated Timecode"))
+    void UpdateIntegratedTimecode(float DeltaTime);
 
 private:
     // Elapsed time in seconds

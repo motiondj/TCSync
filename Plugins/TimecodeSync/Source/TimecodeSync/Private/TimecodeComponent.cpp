@@ -127,48 +127,39 @@ void UTimecodeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // Update timecode if running
+    // 타임코드가 실행 중일 때만 업데이트
     if (bIsRunning)
     {
-        // Update PLL even if not master (needed for smooth time adjustment)
-        if (bUsePLL && PLLSynchronizer && !bIsMaster)
-        {
-            PLLSynchronizer->Update(DeltaTime);
-        }
-
-        // Update timecode only in master mode
+        // 현재 모드에 따라 적절한 업데이트 함수 호출
         if (bIsMaster)
         {
-            // 모드별 타임코드 업데이트 로직
             switch (TimecodeMode)
             {
             case ETimecodeMode::Raw:
-                // 기본 시간 업데이트
-                ElapsedTimeSeconds += DeltaTime;
-                CurrentTimecode = FString::Printf(TEXT("%02d:%02d:%02d:%02d"),
-                    FMath::FloorToInt(ElapsedTimeSeconds / 3600.0f),
-                    FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds / 60.0f, 60.0f)),
-                    FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds, 60.0f)),
-                    FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds * FrameRate, FrameRate)));
-
-                // 타임코드 변경 이벤트 발생
-                OnTimecodeChanged.Broadcast(CurrentTimecode);
+                UpdateRawTimecode(DeltaTime);
                 break;
-
-            case ETimecodeMode::SMPTE_Only:
             case ETimecodeMode::PLL_Only:
+                UpdatePLLTimecode(DeltaTime);
+                break;
+            case ETimecodeMode::SMPTE_Only:
+                UpdateSMPTETimecode(DeltaTime);
+                break;
             case ETimecodeMode::Integrated:
             default:
-                // 기본 타임코드 업데이트 (SMPTE 변환 포함)
-                UpdateTimecode(DeltaTime);
+                UpdateIntegratedTimecode(DeltaTime);
                 break;
             }
         }
+        else if (bUsePLL && PLLSynchronizer)
+        {
+            // 슬레이브 모드에서는 PLL 업데이트 (모드에 상관없이 PLL이 활성화된 경우)
+            PLLSynchronizer->Update(DeltaTime);
+        }
 
-        // Check events for both master and slave
+        // 이벤트 확인 (모든 모드 공통)
         CheckTimecodeEvents();
 
-        // Update network sync timer (master only)
+        // 네트워크 동기화 (마스터 모드일 때만)
         if (bIsMaster && NetworkManager)
         {
             SyncTimer += DeltaTime;
@@ -880,8 +871,6 @@ void UTimecodeComponent::LogDebugInfo()
     UE_LOG(LogTimecodeComponent, Display, TEXT("========================================="));
 }
 
-// TimecodeComponent.cpp 파일 끝에 추가할 새로운 함수들
-
 void UTimecodeComponent::SetTimecodeMode(ETimecodeMode NewMode)
 {
     if (TimecodeMode != NewMode)
@@ -889,11 +878,19 @@ void UTimecodeComponent::SetTimecodeMode(ETimecodeMode NewMode)
         ETimecodeMode OldMode = TimecodeMode;
         TimecodeMode = NewMode;
 
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode mode changed from %d to %d"),
-            *GetOwner()->GetName(), (int32)OldMode, (int32)TimecodeMode);
+        // 로그 메시지에 모드 이름 표시
+        const UEnum* TimecodeEnum = FindObject<UEnum>(ANY_PACKAGE, TEXT("ETimecodeMode"), true);
+        FString OldModeName = TimecodeEnum ? TimecodeEnum->GetNameStringByValue((int64)OldMode) : TEXT("Unknown");
+        FString NewModeName = TimecodeEnum ? TimecodeEnum->GetNameStringByValue((int64)TimecodeMode) : TEXT("Unknown");
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode mode changed from %s to %s"),
+            *GetOwner()->GetName(), *OldModeName, *NewModeName);
 
         // 새 모드 적용
         ApplyTimecodeMode();
+
+        // 모드 변경 이벤트 발생
+        OnTimecodeModeChanged.Broadcast(TimecodeMode);
     }
 }
 
@@ -910,21 +907,29 @@ void UTimecodeComponent::ApplyTimecodeMode()
     case ETimecodeMode::PLL_Only:
         bUsePLL = true;
         bUseDropFrameTimecode = false;
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL Only mode: PLL enabled, Drop Frame disabled"),
+            *GetOwner()->GetName());
         break;
 
     case ETimecodeMode::SMPTE_Only:
         bUsePLL = false;
         bUseDropFrameTimecode = true;
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] SMPTE Only mode: PLL disabled, Drop Frame enabled"),
+            *GetOwner()->GetName());
         break;
 
     case ETimecodeMode::Integrated:
         bUsePLL = true;
         bUseDropFrameTimecode = true;
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Integrated mode: PLL enabled, Drop Frame enabled"),
+            *GetOwner()->GetName());
         break;
 
     case ETimecodeMode::Raw:
         bUsePLL = false;
         bUseDropFrameTimecode = false;
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Raw mode: PLL disabled, Drop Frame disabled"),
+            *GetOwner()->GetName());
         break;
     }
 
@@ -934,10 +939,19 @@ void UTimecodeComponent::ApplyTimecodeMode()
         NetworkManager->SetUsePLL(bUsePLL);
     }
 
-    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Applied timecode mode: %d, PLL: %s, DropFrame: %s"),
-        *GetOwner()->GetName(), (int32)TimecodeMode,
-        bUsePLL ? TEXT("Enabled") : TEXT("Disabled"),
-        bUseDropFrameTimecode ? TEXT("Enabled") : TEXT("Disabled"));
+    // PLL 모듈 직접 설정 - 추가됨
+    if (PLLSynchronizer)
+    {
+        // PLL 모듈 상태 초기화 (모드가 변경되면 이전 상태 초기화)
+        if (bUsePLL)
+        {
+            PLLSynchronizer->Initialize();
+        }
+        else
+        {
+            PLLSynchronizer->Reset();
+        }
+    }
 }
 
 void UTimecodeComponent::SetUsePLL(bool bInUsePLL)
@@ -1043,4 +1057,245 @@ void UTimecodeComponent::SetDedicatedMaster(bool bInIsDedicatedMaster)
 bool UTimecodeComponent::GetIsDedicatedMaster() const
 {
     return bIsDedicatedMaster;
+}
+
+void UTimecodeComponent::UpdateRawTimecode(float DeltaTime)
+{
+    // Raw 모드: 단순히 경과 시간을 증가시키고 기본 형식의 타임코드 생성
+    ElapsedTimeSeconds += DeltaTime;
+
+    // 기본 형식의 타임코드 생성 (HH:MM:SS:FF)
+    int32 Hours = FMath::FloorToInt(ElapsedTimeSeconds / 3600.0f);
+    int32 Minutes = FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds / 60.0f, 60.0f));
+    int32 Seconds = FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds, 60.0f));
+    int32 Frames = FMath::FloorToInt(FMath::Fmod(ElapsedTimeSeconds * FrameRate, FrameRate));
+
+    FString NewTimecode = FString::Printf(TEXT("%02d:%02d:%02d:%02d"), Hours, Minutes, Seconds, Frames);
+
+    if (NewTimecode != CurrentTimecode)
+    {
+        CurrentTimecode = NewTimecode;
+        OnTimecodeChanged.Broadcast(CurrentTimecode);
+
+        UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Raw timecode updated: %s"),
+            *GetOwner()->GetName(), *CurrentTimecode);
+    }
+}
+
+void UTimecodeComponent::UpdatePLLTimecode(float DeltaTime)
+{
+    // PLL 모드: PLL 기반 시간 조정 후 기본 타임코드 생성 (드롭 프레임 없음)
+
+    // PLL 모듈이 초기화되지 않았다면 초기화
+    if (!PLLSynchronizer)
+    {
+        UE_LOG(LogTimecodeComponent, Warning, TEXT("[%s] PLL Synchronizer not available in PLL mode"),
+            *GetOwner()->GetName());
+
+        // PLL이 없으면 원시 시간 업데이트로 대체
+        UpdateRawTimecode(DeltaTime);
+        return;
+    }
+
+    // 시간 업데이트
+    ElapsedTimeSeconds += DeltaTime;
+
+    // PLL 처리를 통한 시간 미세 조정 (마스터 모드에서도 자체 안정화를 위해 PLL 적용)
+    float AdjustedTime = PLLSynchronizer->ProcessTime(ElapsedTimeSeconds, ElapsedTimeSeconds, DeltaTime);
+
+    // 기본 타임코드 형식 생성
+    int32 Hours = FMath::FloorToInt(AdjustedTime / 3600.0f);
+    int32 Minutes = FMath::FloorToInt(FMath::Fmod(AdjustedTime / 60.0f, 60.0f));
+    int32 Seconds = FMath::FloorToInt(FMath::Fmod(AdjustedTime, 60.0f));
+    int32 Frames = FMath::FloorToInt(FMath::Fmod(AdjustedTime * FrameRate, FrameRate));
+
+    FString NewTimecode = FString::Printf(TEXT("%02d:%02d:%02d:%02d"), Hours, Minutes, Seconds, Frames);
+
+    if (NewTimecode != CurrentTimecode)
+    {
+        CurrentTimecode = NewTimecode;
+        ElapsedTimeSeconds = AdjustedTime; // 조정된 시간으로 업데이트
+        OnTimecodeChanged.Broadcast(CurrentTimecode);
+
+        UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] PLL timecode updated: %s"),
+            *GetOwner()->GetName(), *CurrentTimecode);
+    }
+}
+
+void UTimecodeComponent::UpdateSMPTETimecode(float DeltaTime)
+{
+    // SMPTE 모드: SMPTE 타임코드 변환 (드롭 프레임 적용)
+
+    // 시간 업데이트
+    ElapsedTimeSeconds += DeltaTime;
+
+    // SMPTE 컨버터 적용
+    FString NewTimecode;
+    if (SMPTEConverter)
+    {
+        NewTimecode = SMPTEConverter->SecondsToTimecode(ElapsedTimeSeconds, FrameRate, true);
+    }
+    else
+    {
+        // 컨버터가 없으면 유틸리티 함수 사용
+        NewTimecode = UTimecodeUtils::SecondsToTimecode(ElapsedTimeSeconds, FrameRate, true);
+    }
+
+    if (NewTimecode != CurrentTimecode)
+    {
+        CurrentTimecode = NewTimecode;
+        OnTimecodeChanged.Broadcast(CurrentTimecode);
+
+        UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] SMPTE timecode updated: %s"),
+            *GetOwner()->GetName(), *CurrentTimecode);
+    }
+}
+
+void UTimecodeComponent::UpdateIntegratedTimecode(float DeltaTime)
+{
+    // 통합 모드: PLL로 시간 조정 후 SMPTE 드롭 프레임 적용
+
+    // PLL 모듈이 초기화되지 않았다면 초기화
+    if (!PLLSynchronizer)
+    {
+        UE_LOG(LogTimecodeComponent, Warning, TEXT("[%s] PLL Synchronizer not available in Integrated mode"),
+            *GetOwner()->GetName());
+
+        // PLL이 없으면 SMPTE 시간 업데이트로 대체
+        UpdateSMPTETimecode(DeltaTime);
+        return;
+    }
+
+    // 시간 업데이트
+    ElapsedTimeSeconds += DeltaTime;
+
+    // PLL 처리를 통한 시간 미세 조정
+    float AdjustedTime = PLLSynchronizer->ProcessTime(ElapsedTimeSeconds, ElapsedTimeSeconds, DeltaTime);
+
+    // SMPTE 컨버터로 타임코드 생성
+    FString NewTimecode;
+    if (SMPTEConverter)
+    {
+        NewTimecode = SMPTEConverter->SecondsToTimecode(AdjustedTime, FrameRate, true);
+    }
+    else
+    {
+        // 컨버터가 없으면 유틸리티 함수 사용
+        NewTimecode = UTimecodeUtils::SecondsToTimecode(AdjustedTime, FrameRate, true);
+    }
+
+    if (NewTimecode != CurrentTimecode)
+    {
+        CurrentTimecode = NewTimecode;
+        ElapsedTimeSeconds = AdjustedTime; // 조정된 시간으로 업데이트
+        OnTimecodeChanged.Broadcast(CurrentTimecode);
+
+        UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Integrated timecode updated: %s"),
+            *GetOwner()->GetName(), *CurrentTimecode);
+    }
+}
+
+void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
+{
+    // 슬레이브 모드에서만 처리
+    if (!bIsMaster)
+    {
+        switch (Message.MessageType)
+        {
+        case ETimecodeMessageType::TimecodeSync:
+            // 타임코드 업데이트 로직
+            if (Message.Timecode != CurrentTimecode)
+            {
+                CurrentTimecode = Message.Timecode;
+
+                // 타임코드 문자열을 초 단위로 변환
+                float ReceivedTimeSeconds;
+                // 현재 모드에 따라 변환 방식 결정
+                if (TimecodeMode == ETimecodeMode::SMPTE_Only || TimecodeMode == ETimecodeMode::Integrated)
+                {
+                    // SMPTE 변환 사용
+                    if (SMPTEConverter)
+                    {
+                        ReceivedTimeSeconds = SMPTEConverter->TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
+                    }
+                    else
+                    {
+                        ReceivedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
+                    }
+                }
+                else
+                {
+                    // 일반 변환 사용 (드롭 프레임 없음)
+                    if (SMPTEConverter)
+                    {
+                        ReceivedTimeSeconds = SMPTEConverter->TimecodeToSeconds(CurrentTimecode, FrameRate, false);
+                    }
+                    else
+                    {
+                        ReceivedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, false);
+                    }
+                }
+
+                // 모드에 따라 시간 처리
+                if ((TimecodeMode == ETimecodeMode::PLL_Only || TimecodeMode == ETimecodeMode::Integrated) && bUsePLL && PLLSynchronizer)
+                {
+                    // PLL 보정 적용
+                    ElapsedTimeSeconds = PLLSynchronizer->ProcessTime(ElapsedTimeSeconds, ReceivedTimeSeconds, GetWorld()->GetDeltaSeconds());
+
+                    // PLL 상태 로깅
+                    double Phase, Frequency, Offset;
+                    PLLSynchronizer->GetStatus(Phase, Frequency, Offset);
+                    UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] PLL Correction - Freq: %.6f, Offset: %.3fms"),
+                        *GetOwner()->GetName(), Frequency, Offset * 1000.0);
+                }
+                else
+                {
+                    // PLL 없이 직접 시간 설정
+                    ElapsedTimeSeconds = ReceivedTimeSeconds;
+                }
+
+                // 타임코드 변경 이벤트 발생
+                OnTimecodeChanged.Broadcast(CurrentTimecode);
+
+                UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Received timecode sync: %s (Mode: %d)"),
+                    *GetOwner()->GetName(), *CurrentTimecode, (int32)TimecodeMode);
+            }
+            break;
+
+            // 나머지 케이스 처리...
+        case ETimecodeMessageType::Event:
+            // 이미 구현된 이벤트 처리 로직 유지
+            break;
+
+        case ETimecodeMessageType::RoleAssignment:
+            // 이미 구현된, 역할 할당 처리 로직 유지
+            break;
+
+            // 새로운 메시지 타입 추가: 모드 변경
+        case ETimecodeMessageType::Command:
+            // 명령 메시지 처리 (모드 변경 등)
+            if (!Message.Data.IsEmpty())
+            {
+                // 모드 변경 명령 형식: "SetMode:모드번호"
+                if (Message.Data.StartsWith(TEXT("SetMode:")))
+                {
+                    FString ModeStr = Message.Data.Mid(8); // "SetMode:" 이후 텍스트
+                    int32 ModeValue = FCString::Atoi(*ModeStr);
+                    if (ModeValue >= 0 && ModeValue <= 3) // 유효한 모드 범위
+                    {
+                        ETimecodeMode NewMode = static_cast<ETimecodeMode>(ModeValue);
+                        SetTimecodeMode(NewMode);
+
+                        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Mode changed via network to: %d"),
+                            *GetOwner()->GetName(), (int32)NewMode);
+                    }
+                }
+            }
+            break;
+
+        default:
+            // 기타 메시지 타입 처리
+            break;
+        }
+    }
 }
