@@ -1,6 +1,7 @@
 ﻿// TimecodeComponent.cpp
 
 #include "TimecodeComponent.h"
+#include "TimecodeNetworkManager.h"  // 이 헤더 추가
 #include "TimecodeUtils.h"
 #include "TimecodeSettings.h"
 #include "PLLSynchronizer.h"
@@ -1192,110 +1193,5 @@ void UTimecodeComponent::UpdateIntegratedTimecode(float DeltaTime)
 
         UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Integrated timecode updated: %s"),
             *GetOwner()->GetName(), *CurrentTimecode);
-    }
-}
-
-void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
-{
-    // 슬레이브 모드에서만 처리
-    if (!bIsMaster)
-    {
-        switch (Message.MessageType)
-        {
-        case ETimecodeMessageType::TimecodeSync:
-            // 타임코드 업데이트 로직
-            if (Message.Timecode != CurrentTimecode)
-            {
-                CurrentTimecode = Message.Timecode;
-
-                // 타임코드 문자열을 초 단위로 변환
-                float ReceivedTimeSeconds;
-                // 현재 모드에 따라 변환 방식 결정
-                if (TimecodeMode == ETimecodeMode::SMPTE_Only || TimecodeMode == ETimecodeMode::Integrated)
-                {
-                    // SMPTE 변환 사용
-                    if (SMPTEConverter)
-                    {
-                        ReceivedTimeSeconds = SMPTEConverter->TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
-                    }
-                    else
-                    {
-                        ReceivedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
-                    }
-                }
-                else
-                {
-                    // 일반 변환 사용 (드롭 프레임 없음)
-                    if (SMPTEConverter)
-                    {
-                        ReceivedTimeSeconds = SMPTEConverter->TimecodeToSeconds(CurrentTimecode, FrameRate, false);
-                    }
-                    else
-                    {
-                        ReceivedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, false);
-                    }
-                }
-
-                // 모드에 따라 시간 처리
-                if ((TimecodeMode == ETimecodeMode::PLL_Only || TimecodeMode == ETimecodeMode::Integrated) && bUsePLL && PLLSynchronizer)
-                {
-                    // PLL 보정 적용
-                    ElapsedTimeSeconds = PLLSynchronizer->ProcessTime(ElapsedTimeSeconds, ReceivedTimeSeconds, GetWorld()->GetDeltaSeconds());
-
-                    // PLL 상태 로깅
-                    double Phase, Frequency, Offset;
-                    PLLSynchronizer->GetStatus(Phase, Frequency, Offset);
-                    UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] PLL Correction - Freq: %.6f, Offset: %.3fms"),
-                        *GetOwner()->GetName(), Frequency, Offset * 1000.0);
-                }
-                else
-                {
-                    // PLL 없이 직접 시간 설정
-                    ElapsedTimeSeconds = ReceivedTimeSeconds;
-                }
-
-                // 타임코드 변경 이벤트 발생
-                OnTimecodeChanged.Broadcast(CurrentTimecode);
-
-                UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Received timecode sync: %s (Mode: %d)"),
-                    *GetOwner()->GetName(), *CurrentTimecode, (int32)TimecodeMode);
-            }
-            break;
-
-            // 나머지 케이스 처리...
-        case ETimecodeMessageType::Event:
-            // 이미 구현된 이벤트 처리 로직 유지
-            break;
-
-        case ETimecodeMessageType::RoleAssignment:
-            // 이미 구현된, 역할 할당 처리 로직 유지
-            break;
-
-            // 새로운 메시지 타입 추가: 모드 변경
-        case ETimecodeMessageType::Command:
-            // 명령 메시지 처리 (모드 변경 등)
-            if (!Message.Data.IsEmpty())
-            {
-                // 모드 변경 명령 형식: "SetMode:모드번호"
-                if (Message.Data.StartsWith(TEXT("SetMode:")))
-                {
-                    FString ModeStr = Message.Data.Mid(8); // "SetMode:" 이후 텍스트
-                    int32 ModeValue = FCString::Atoi(*ModeStr);
-                    if (ModeValue >= 0 && ModeValue <= 3) // 유효한 모드 범위
-                    {
-                        ETimecodeMode NewMode = static_cast<ETimecodeMode>(ModeValue);
-                        SetTimecodeMode(NewMode);
-
-                        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Mode changed via network to: %d"),
-                            *GetOwner()->GetName(), (int32)NewMode);
-                    }
-                }
-            }
-            break;
-
-        default:
-            // 기타 메시지 타입 처리
-            break;
-        }
     }
 }

@@ -9,7 +9,7 @@
 #include "SocketSubsystem.h"
 #include "IPAddress.h"
 #include "Serialization/ArrayReader.h"
-#include "TimecodeNetworkTypes.h"
+#include "TimecodeNetworkTypes.h"       // 공유 타입 정의를 포함
 #include "TimecodeNetworkManager.generated.h"
 
 class FSocket;

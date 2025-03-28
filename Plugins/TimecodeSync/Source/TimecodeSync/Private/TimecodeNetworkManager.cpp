@@ -997,3 +997,63 @@ bool UTimecodeNetworkManager::IsDedicatedMaster() const
 {
     return bIsDedicatedMaster;
 }
+
+bool UTimecodeNetworkManager::SendModeChangeCommand(ETimecodeMode NewMode)
+{
+    if (Socket == nullptr || ConnectionState != ENetworkConnectionState::Connected)
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Cannot send mode change command: Socket not connected"));
+        return false;
+    }
+
+    // 명령 메시지 생성
+    FTimecodeNetworkMessage Message;
+    Message.MessageType = ETimecodeMessageType::Command;
+    Message.Timecode = TEXT("00:00:00:00"); // 기본 타임코드
+    Message.Data = FString::Printf(TEXT("SetMode:%d"), static_cast<int32>(NewMode));
+    Message.Timestamp = FPlatformTime::Seconds();
+    Message.SenderID = InstanceID;
+
+    // 메시지 직렬화
+    TArray<uint8> MessageData = Message.Serialize();
+
+    // 전송 로직 (멀티캐스트 우선, 없으면 타겟 IP, 없으면 마스터 IP)
+    int32 BytesSent = 0;
+    bool bSuccess = false;
+
+    if (!MulticastGroupAddress.IsEmpty())
+    {
+        // 멀티캐스트 그룹으로 전송
+        TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
+        bool bIsValid = false;
+        MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
+        if (bIsValid)
+        {
+            MulticastAddr->SetPort(SendPortNumber);
+            bSuccess = Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
+        }
+    }
+    else if (!TargetIPAddress.IsEmpty())
+    {
+        // 타겟 IP로 전송
+        TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
+        bool bIsValid = false;
+        TargetAddr->SetIp(*TargetIPAddress, bIsValid);
+        if (bIsValid)
+        {
+            TargetAddr->SetPort(SendPortNumber);
+            bSuccess = Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
+        }
+    }
+
+    if (bSuccess)
+    {
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Sent mode change command: %d"), static_cast<int32>(NewMode));
+        return true;
+    }
+    else
+    {
+        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to send mode change command"));
+        return false;
+    }
+}

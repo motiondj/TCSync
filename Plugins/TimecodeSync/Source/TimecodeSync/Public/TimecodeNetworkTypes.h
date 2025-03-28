@@ -22,6 +22,16 @@ enum class ETimecodeRoleMode : uint8
     Manual    UMETA(DisplayName = "Manual Setting")
 };
 
+// Define timecode operation modes (이동된 부분)
+UENUM(BlueprintType)
+enum class ETimecodeMode : uint8
+{
+    PLL_Only UMETA(DisplayName = "PLL Synchronization Only"),
+    SMPTE_Only UMETA(DisplayName = "SMPTE Timecode Only"),
+    Integrated UMETA(DisplayName = "PLL and SMPTE Integrated"),
+    Raw UMETA(DisplayName = "Raw Time (No Processing)")
+};
+
 // Delegate for role mode change event
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRoleModeChangedDelegate, ETimecodeRoleMode, NewMode);
 

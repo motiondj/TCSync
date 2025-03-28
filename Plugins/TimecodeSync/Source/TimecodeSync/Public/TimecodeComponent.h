@@ -2,12 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "TimecodeNetworkManager.h"
-#include "TimecodeNetworkTypes.h"
+#include "TimecodeNetworkTypes.h"     // ETimecodeMode 정의가 포함된 헤더
 #include "PLLSynchronizer.h"
 #include "SMPTETimecodeConverter.h"
 #include "TimecodeComponent.generated.h"
 
+// 전방 선언
+class UTimecodeNetworkManager;
 class UPLLSynchronizer;
 class USMPTETimecodeConverter;
 
@@ -25,16 +26,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRoleChanged, bool, IsMaster);
 
 // TimecodeMode 변경 이벤트를 위한 델리게이트 선언
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimecodeModeChanged, ETimecodeMode, NewMode);
-
-// Define timecode operation modes
-UENUM(BlueprintType)
-enum class ETimecodeMode : uint8
-{
-    PLL_Only UMETA(DisplayName = "PLL Synchronization Only"),
-    SMPTE_Only UMETA(DisplayName = "SMPTE Timecode Only"),
-    Integrated UMETA(DisplayName = "PLL and SMPTE Integrated"),
-    Raw UMETA(DisplayName = "Raw Time (No Processing)")
-};
 
 /**
  * Component that provides timecode functionality when attached to an actor
