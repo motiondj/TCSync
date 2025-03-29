@@ -3,6 +3,7 @@
 #include "TimecodeNetworkManager.h"
 #include "Misc/AutomationTest.h"
 #include "Logging/LogMacros.h"
+#include "Tests/TimecodeSyncTestLogger.h"  // 새 로거 헤더 추가
 
 UTimecodeSyncNetworkTest::UTimecodeSyncNetworkTest()
 {
@@ -13,10 +14,15 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
     bool bSuccess = false;
     FString ResultMessage;
 
+    // 테스트 시작 로그
+    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("UDP Connection"),
+        FString::Printf(TEXT("Starting UDP connection test on port %d"), Port));
+
     // Get socket subsystem
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (!SocketSubsystem)
     {
+        UTimecodeSyncTestLogger::Get()->LogError(TEXT("UDP Connection"), TEXT("Socket subsystem not found"));
         LogTestResult(TEXT("UDP Connection"), false, TEXT("Socket subsystem not found"));
         return false;
     }
@@ -40,6 +46,7 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
         if (SenderSocket) SocketSubsystem->DestroySocket(SenderSocket);
         if (ReceiverSocket) SocketSubsystem->DestroySocket(ReceiverSocket);
 
+        UTimecodeSyncTestLogger::Get()->LogError(TEXT("UDP Connection"), TEXT("Failed to create UDP sockets"));
         LogTestResult(TEXT("UDP Connection"), false, TEXT("Failed to create UDP sockets"));
         return false;
     }
@@ -77,11 +84,15 @@ bool UTimecodeSyncNetworkTest::TestUDPConnection(int32 Port)
         FString ReceivedMessage = ANSI_TO_TCHAR((char*)ReceiveBuffer.GetData());
         bSuccess = (ReceivedMessage == TestMessage);
         ResultMessage = FString::Printf(TEXT("Sent: %s, Received: %s, Bytes: %d"), *TestMessage, *ReceivedMessage, BytesRead);
+
+        UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("UDP Connection"), ResultMessage);
     }
     else
     {
         ResultMessage = FString::Printf(TEXT("Send success: %d, Receive success: %d, Bytes read: %d"),
             bSendSuccess, bRecvSuccess, BytesRead);
+
+        UTimecodeSyncTestLogger::Get()->LogWarning(TEXT("UDP Connection"), ResultMessage);
     }
 
     // Clean up sockets
@@ -97,9 +108,10 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
     bool bSuccess = false;
     FString ResultMessage;
 
-    UE_LOG(LogTemp, Display, TEXT("=============================="));
-    UE_LOG(LogTemp, Display, TEXT("[TimecodeSyncTest] Packet Loss Handling: Testing..."));
-    UE_LOG(LogTemp, Display, TEXT("Simulating packet transmission with %.1f%% loss rate..."), LossPercentage);
+    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Packet Loss"), TEXT("=============================="));
+    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Packet Loss"), TEXT("Packet Loss Handling: Testing..."));
+    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Packet Loss"),
+        FString::Printf(TEXT("Simulating packet transmission with %.1f%% loss rate..."), LossPercentage));
 
     // 테스트 시뮬레이션 구현
     const int32 TotalPackets = 100;
@@ -139,8 +151,9 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
         }
 
         RecoveredPackets += CurrentRecovered;
-        UE_LOG(LogTemp, Display, TEXT("Retry %d recovered %d of %d packets"),
-            RetryAttempt + 1, CurrentRecovered, PendingRetry);
+        UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Packet Loss"),
+            FString::Printf(TEXT("Retry %d recovered %d of %d packets"),
+                RetryAttempt + 1, CurrentRecovered, PendingRetry));
 
         // 모든 패킷 복구되면 종료
         if (RecoveredPackets >= LostPackets)
@@ -177,6 +190,9 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
 
         ActualLossRate = 25.0f; // 강제 적용
         FinalLossRate = 5.0f;   // 강제 적용
+
+        UTimecodeSyncTestLogger::Get()->LogWarning(TEXT("Packet Loss"),
+            TEXT("Insufficient initial packet loss, forcing test scenario"));
     }
 
     // 테스트 결과 평가
@@ -191,26 +207,16 @@ bool UTimecodeSyncNetworkTest::TestPacketLoss(float LossPercentage)
 
 void UTimecodeSyncNetworkTest::LogTestResult(const FString& TestName, bool bSuccess, const FString& Message)
 {
-    FString ResultStr = bSuccess ? TEXT("PASSED") : TEXT("FAILED");
-    // Output to both regular log and screen message
-    UE_LOG(LogTemp, Display, TEXT("=============================="));
-    UE_LOG(LogTemp, Display, TEXT("[TimecodeSyncTest] %s: %s"), *TestName, *ResultStr);
-    UE_LOG(LogTemp, Display, TEXT("%s"), *Message);
-    UE_LOG(LogTemp, Display, TEXT("=============================="));
-
-    // Display message on screen (useful during development)
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 5.0f, bSuccess ? FColor::Green : FColor::Red,
-            FString::Printf(TEXT("[TimecodeSyncTest] %s: %s"), *TestName, *ResultStr));
-        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::White, Message);
-    }
+    // 새 로거 사용
+    UTimecodeSyncTestLogger::Get()->LogTestResult(TestName, bSuccess, Message);
 }
 
 bool UTimecodeSyncNetworkTest::TestMessageSerialization()
 {
     bool bSuccess = true;
     FString ResultMessage;
+
+    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Message Serialization"), TEXT("Starting message serialization test"));
 
     // Test case 1: Basic timecode message
     {
@@ -229,6 +235,7 @@ bool UTimecodeSyncNetworkTest::TestMessageSerialization()
         {
             bSuccess = false;
             ResultMessage += TEXT("Test Case 1: Serialization failed - Empty data\n");
+            UTimecodeSyncTestLogger::Get()->LogError(TEXT("Message Serialization"), TEXT("Test Case 1: Serialization failed - Empty data"));
         }
         else
         {
@@ -241,6 +248,7 @@ bool UTimecodeSyncNetworkTest::TestMessageSerialization()
             {
                 bSuccess = false;
                 ResultMessage += TEXT("Test Case 1: Deserialization failed\n");
+                UTimecodeSyncTestLogger::Get()->LogError(TEXT("Message Serialization"), TEXT("Test Case 1: Deserialization failed"));
             }
             else
             {
@@ -253,12 +261,16 @@ bool UTimecodeSyncNetworkTest::TestMessageSerialization()
                 if (!bMessagesEqual)
                 {
                     bSuccess = false;
-                    ResultMessage += FString::Printf(TEXT("Test Case 1: Message mismatch - Original: %s, Deserialized: %s\n"),
+                    FString ErrorMsg = FString::Printf(TEXT("Test Case 1: Message mismatch - Original: %s, Deserialized: %s\n"),
                         *OriginalMessage.Timecode, *DeserializedMessage.Timecode);
+                    ResultMessage += ErrorMsg;
+                    UTimecodeSyncTestLogger::Get()->LogError(TEXT("Message Serialization"), ErrorMsg);
                 }
                 else
                 {
                     ResultMessage += TEXT("Test Case 1: Successfully serialized and deserialized basic message\n");
+                    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Message Serialization"),
+                        TEXT("Test Case 1: Successfully serialized and deserialized basic message"));
                 }
             }
         }
@@ -281,6 +293,8 @@ bool UTimecodeSyncNetworkTest::TestMessageSerialization()
         {
             bSuccess = false;
             ResultMessage += TEXT("Test Case 2: Serialization failed - Empty data\n");
+            UTimecodeSyncTestLogger::Get()->LogError(TEXT("Message Serialization"),
+                TEXT("Test Case 2: Serialization failed - Empty data"));
         }
         else
         {
@@ -293,6 +307,8 @@ bool UTimecodeSyncNetworkTest::TestMessageSerialization()
             {
                 bSuccess = false;
                 ResultMessage += TEXT("Test Case 2: Deserialization failed\n");
+                UTimecodeSyncTestLogger::Get()->LogError(TEXT("Message Serialization"),
+                    TEXT("Test Case 2: Deserialization failed"));
             }
             else
             {
@@ -306,12 +322,16 @@ bool UTimecodeSyncNetworkTest::TestMessageSerialization()
                 if (!bMessagesEqual)
                 {
                     bSuccess = false;
-                    ResultMessage += FString::Printf(TEXT("Test Case 2: Message mismatch - Original event: %s, Deserialized event: %s\n"),
+                    FString ErrorMsg = FString::Printf(TEXT("Test Case 2: Message mismatch - Original event: %s, Deserialized event: %s\n"),
                         *OriginalMessage.Data, *DeserializedMessage.Data);
+                    ResultMessage += ErrorMsg;
+                    UTimecodeSyncTestLogger::Get()->LogError(TEXT("Message Serialization"), ErrorMsg);
                 }
                 else
                 {
                     ResultMessage += TEXT("Test Case 2: Successfully serialized and deserialized event message\n");
+                    UTimecodeSyncTestLogger::Get()->LogInfo(TEXT("Message Serialization"),
+                        TEXT("Test Case 2: Successfully serialized and deserialized event message"));
                 }
             }
         }
