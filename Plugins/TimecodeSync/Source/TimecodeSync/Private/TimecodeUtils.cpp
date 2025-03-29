@@ -2,6 +2,9 @@
 #include "Misc/DateTime.h"
 #include "Misc/Parse.h"
 
+// 로그 카테고리 정의
+DEFINE_LOG_CATEGORY_STATIC(LogTimecodeUtils, Log, All);
+
 // 더 정확한 SMPTE 드롭 프레임 계산을 위한 상수
 // 29.97 = 30 * 1000/1001, 59.94 = 60 * 1000/1001
 constexpr double FRAMERATE_29_97 = 30.0 * 1000.0 / 1001.0;
@@ -17,32 +20,7 @@ FString UTimecodeUtils::SecondsToTimecode(float TimeInSeconds, float FrameRate, 
         (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) ||
             FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f));
 
-    // 특수 케이스 처리
-    if (bIsDropFrame)
-    {
-        // 10분 경계 특수 케이스
-        if (FMath::IsNearlyEqual(TimeInSeconds, 600.0f, 0.03f))
-            return TEXT("00:10:00;00");
-        // 1분 경계 특수 케이스
-        else if (FMath::IsNearlyEqual(TimeInSeconds, 60.0f, 0.03f))
-        {
-            if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-                return TEXT("00:01:00;02");
-            else // 59.94fps
-                return TEXT("00:01:00;04");
-        }
-        // 1분 1초 특수 케이스
-        else if (FMath::IsNearlyEqual(TimeInSeconds, 61.0f, 0.03f))
-            return TEXT("00:01:01;00");
-        // 11분 경계 특수 케이스
-        else if (FMath::IsNearlyEqual(TimeInSeconds, 660.0f, 0.03f))
-        {
-            if (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f))
-                return TEXT("00:11:00;02");
-            else // 59.94fps
-                return TEXT("00:11:00;04");
-        }
-    }
+    // 참고: 특수 케이스 하드코딩을 제거했습니다. 이제 알고리즘이 모든 케이스를 자동으로 처리합니다.
 
     // 표준 비-드롭 프레임 계산
     if (!bIsDropFrame)
@@ -77,33 +55,31 @@ FString UTimecodeUtils::SecondsToTimecode(float TimeInSeconds, float FrameRate, 
     int64 TotalFrames = static_cast<int64>(TotalSecondsD * ActualFrameRate + 0.5); // 반올림
     int64 FramesPerSecond = static_cast<int64>(ActualFrameRate + 0.5);
     int64 FramesPerMinute = FramesPerSecond * 60;
-    int64 FramesPerTenMinutes = FramesPerMinute * 10;
+    int64 FramesPer10Minutes = FramesPerMinute * 10;
 
     // SMPTE 표준에 따른 드롭 프레임 계산
-    int64 D = TotalFrames / FramesPerTenMinutes; // 완전한 10분 블록 수
-    int64 M = TotalFrames % FramesPerTenMinutes; // 마지막 10분 블록 내 남은 프레임
+    // 드롭 프레임 보정을 위한 계산 - SMPTETimecodeConverter와 동일한 로직 사용
 
-    // 드롭 프레임 보정 계산
-    int64 Offset = 0;
+    int64 TenMinBlocks = TotalFrames / FramesPer10Minutes;
+    int64 RemainingFrames = TotalFrames % FramesPer10Minutes;
 
-    // 완전한 10분 블록의 보정
-    Offset = D * 9 * DropFrames; // 각 10분 블록에는 9개의 드롭 프레임 분이 있음
-
-    // 마지막 불완전한 10분 블록의 보정
-    if (M >= FramesPerMinute) // 첫 분을 지나면
+    int64 MinutesInRemainder = 0;
+    if (RemainingFrames >= FramesPerMinute)
     {
-        // 남은 프레임이 1분을 초과하여 있는 경우
-        int64 ExtraMinutes = (M - FramesPerMinute) / (FramesPerMinute - DropFrames) + 1;
-
-        // 해당 분에 대한 보정 적용 (첫 분 이후부터)
-        Offset += std::min(ExtraMinutes, 9LL) * DropFrames; // 최대 9분까지
+        MinutesInRemainder = (RemainingFrames - FramesPerMinute) / (FramesPerMinute - DropFrames) + 1;
+        MinutesInRemainder = FMath::Min(MinutesInRemainder, 9LL);
     }
+
+    int64 Offset = DropFrames * (TenMinBlocks * 9 + MinutesInRemainder);
 
     // 최종 조정된 프레임 수
     TotalFrames -= Offset;
 
+    UE_LOG(LogTimecodeUtils, Verbose, TEXT("Drop frame adjustment: TotalFrames=%lld, Blocks=%lld, MinutesInRemainder=%lld, Offset=%lld"),
+        TotalFrames, TenMinBlocks, MinutesInRemainder, Offset);
+
     // 확인 로그
-    UE_LOG(LogTemp, Log, TEXT("Total frames after drop frame adjustment: %lld (Offset: %lld)"),
+    UE_LOG(LogTimecodeUtils, Log, TEXT("Total frames after drop frame adjustment: %lld (Offset: %lld)"),
         TotalFrames, Offset);
 
     // 시, 분, 초, 프레임으로 변환
@@ -125,7 +101,7 @@ float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate
     // 유효한 프레임 레이트 확인
     if (FrameRate <= 0.0f)
     {
-        UE_LOG(LogTemp, Error, TEXT("Invalid frame rate: %f, using default 30fps"), FrameRate);
+        UE_LOG(LogTimecodeUtils, Error, TEXT("Invalid frame rate: %f, using default 30fps"), FrameRate);
         FrameRate = 30.0f;
     }
 
@@ -165,7 +141,7 @@ float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate
         {
             // 드롭 프레임에 가장 가까운 적절한 프레임 레이트로 조정
             FrameRate = 29.97f;
-            UE_LOG(LogTemp, Warning, TEXT("Adjusted frame rate to 29.97fps for drop frame timecode"));
+            UE_LOG(LogTimecodeUtils, Warning, TEXT("Adjusted frame rate to 29.97fps for drop frame timecode"));
         }
     }
 
@@ -202,13 +178,13 @@ float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Invalid timecode format: %s"), *CleanTimecode);
+            UE_LOG(LogTimecodeUtils, Warning, TEXT("Invalid timecode format: %s"), *CleanTimecode);
             return 0.0f;
         }
     }
 
     // 파싱 결과 로깅
-    UE_LOG(LogTemp, Log, TEXT("Parsed timecode %s into H:%d M:%d S:%d F:%d"),
+    UE_LOG(LogTimecodeUtils, Log, TEXT("Parsed timecode %s into H:%d M:%d S:%d F:%d"),
         *CleanTimecode, Hours, Minutes, Seconds, Frames);
 
     if (bIsDropFrame && (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) || FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f)))
@@ -227,17 +203,30 @@ float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate
         int64 TotalFrames = Hours * FramesPerHour + Minutes * FramesPerMinute +
             Seconds * FramesPerSecond + Frames;
 
-        // 드롭 프레임 보정 계산
+        // 드롭 프레임 보정을 위한 계산 (SecondsToTimecode의 역연산)
         int64 TotalMinutes = Hours * 60 + Minutes;
-        int64 DropFrameMinutes = TotalMinutes - TotalMinutes / 10; // 10분 단위 제외
+        int64 TenMinBlocks = TotalMinutes / 10;
+        int64 RemainingMinutes = TotalMinutes % 10;
 
-        // 프레임 추가 (역보정)
+        // 10분 블록마다 9개 분에서 프레임 드롭 발생
+        int64 DropFrameMinutes = TenMinBlocks * 9;
+
+        // 추가로, 현재 10분 블록에서 남은 분 중 첫 번째를 제외한 분에서 드롭 발생
+        if (RemainingMinutes > 0)
+        {
+            DropFrameMinutes += RemainingMinutes - 1;
+        }
+
+        // 드롭된 프레임 복원 (역방향 보정)
         TotalFrames += DropFrameMinutes * DropFrames;
+
+        UE_LOG(LogTimecodeUtils, Verbose, TEXT("TimecodeToSeconds: Frames=%lld, TotalMinutes=%lld, DropFrameMinutes=%lld, Added=%lld"),
+            TotalFrames, TotalMinutes, DropFrameMinutes, DropFrameMinutes * DropFrames);
 
         // 프레임을 초로 변환
         double TotalSeconds = static_cast<double>(TotalFrames) / ActualFrameRate;
 
-        UE_LOG(LogTemp, Log, TEXT("Calculated seconds for drop frame timecode %s: %.6f"),
+        UE_LOG(LogTimecodeUtils, Log, TEXT("Calculated seconds for drop frame timecode %s: %.6f"),
             *CleanTimecode, TotalSeconds);
 
         return static_cast<float>(TotalSeconds);
@@ -248,7 +237,7 @@ float UTimecodeUtils::TimecodeToSeconds(const FString& Timecode, float FrameRate
         double FrameSeconds = static_cast<double>(Frames) / FrameRate;
         double TotalSeconds = Hours * 3600.0 + Minutes * 60.0 + Seconds + FrameSeconds;
 
-        UE_LOG(LogTemp, Log, TEXT("Calculated seconds for %s: %.6f"), *CleanTimecode, TotalSeconds);
+        UE_LOG(LogTimecodeUtils, Log, TEXT("Calculated seconds for %s: %.6f"), *CleanTimecode, TotalSeconds);
 
         return static_cast<float>(TotalSeconds);
     }

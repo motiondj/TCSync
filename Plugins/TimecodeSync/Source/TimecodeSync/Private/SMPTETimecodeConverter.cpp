@@ -13,6 +13,25 @@ USMPTETimecodeConverter::USMPTETimecodeConverter()
 
 FString USMPTETimecodeConverter::SecondsToTimecode(float TimeInSeconds, float FrameRate, bool bUseDropFrame)
 {
+    // 캐싱을 위한 정적 변수
+    static double LastTimeInSeconds = -1.0;
+    static float LastFrameRate = 0.0f;
+    static bool LastUseDropFrame = false;
+    static FString CachedTimecode;
+
+    // 동일한 입력에 대해 캐시된 결과 반환
+    if (FMath::IsNearlyEqual(LastTimeInSeconds, TimeInSeconds, 0.0001) &&
+        FMath::IsNearlyEqual(LastFrameRate, FrameRate, 0.001) &&
+        LastUseDropFrame == bUseDropFrame)
+    {
+        UE_LOG(LogSMPTEConverter, Verbose, TEXT("Using cached timecode for %.3f sec: %s"),
+            TimeInSeconds, *CachedTimecode);
+        return CachedTimecode;
+    }
+
+    UE_LOG(LogSMPTEConverter, Verbose, TEXT("Converting %.3f seconds to timecode, FrameRate=%.3f, DropFrame=%s"),
+        TimeInSeconds, FrameRate, bUseDropFrame ? TEXT("true") : TEXT("false"));
+
     // Handle negative time
     TimeInSeconds = FMath::Max(0.0f, TimeInSeconds);
 
@@ -31,7 +50,16 @@ FString USMPTETimecodeConverter::SecondsToTimecode(float TimeInSeconds, float Fr
         float FrameTime = TimeInSeconds - FMath::FloorToInt(TimeInSeconds);
         int32 Frames = FMath::FloorToInt(FrameTime * FrameRate);
 
-        return FString::Printf(TEXT("%02d:%02d:%02d:%02d"), Hours, Minutes, Seconds, Frames);
+        FString ResultTimecode = FString::Printf(TEXT("%02d:%02d:%02d:%02d"), Hours, Minutes, Seconds, Frames);
+
+        // 계산 결과 캐싱
+        LastTimeInSeconds = TimeInSeconds;
+        LastFrameRate = FrameRate;
+        LastUseDropFrame = bUseDropFrame;
+        CachedTimecode = ResultTimecode;
+
+        UE_LOG(LogSMPTEConverter, Verbose, TEXT("Final timecode result: %s"), *ResultTimecode);
+        return ResultTimecode;
     }
 
     // SMPTE drop frame timecode calculation - complete reimplementation
@@ -58,28 +86,11 @@ FString USMPTETimecodeConverter::SecondsToTimecode(float TimeInSeconds, float Fr
     UE_LOG(LogSMPTEConverter, Verbose, TEXT("Input time: %.3f sec, Frame rate: %.3f, Total frames: %lld"),
         TimeInSeconds, ActualFrameRate, TotalFrames);
 
-    // SMPTE standard calculation
-    // Skip first 2 (or 4) frame numbers every minute except every 10th minute
-    int64 D = TotalFrames / (FramesPerSecond * 60 * 10); // Number of 10-minute blocks
-    int64 M = TotalFrames % (FramesPerSecond * 60 * 10); // Frames within the 10-minute block
-
-    // Check if past 1-minute boundary
-    if (M >= FramesPerSecond * 60)
-    {
-        // Number of minutes within the 10-minute block (excluding first minute)
-        int64 E = (M - FramesPerSecond * 60) / (FramesPerSecond * 60 - DropFrames);
-        // Apply drop frame adjustment
-        TotalFrames = TotalFrames - (DropFrames * (D * 9 + E));
-    }
-    else
-    {
-        // Within first minute of 10-minute block, no adjustment needed for this minute
-        TotalFrames = TotalFrames - (DropFrames * D * 9);
-    }
+    // Apply drop frame adjustment using the centralized calculation function
+    TotalFrames -= CalculateDropFrameAdjustment(TotalFrames, ActualFrameRate);
 
     // Debug log
-    UE_LOG(LogSMPTEConverter, Verbose, TEXT("10-min blocks: %lld, Remaining frames: %lld, Final adjusted frames: %lld"),
-        D, M, TotalFrames);
+    UE_LOG(LogSMPTEConverter, Verbose, TEXT("Final adjusted frames: %lld"), TotalFrames);
 
     // Calculate final hours, minutes, seconds, frames
     int32 Hours = static_cast<int32>(TotalFrames / (FramesPerSecond * 3600));
@@ -91,15 +102,27 @@ FString USMPTETimecodeConverter::SecondsToTimecode(float TimeInSeconds, float Fr
     int32 Seconds = static_cast<int32>(TotalFrames / FramesPerSecond);
     int32 Frames = static_cast<int32>(TotalFrames % FramesPerSecond);
 
-    // Special case: exactly at 10-minute boundary should be 00 frames
-    if (TimeInSeconds >= 600.0 && FMath::IsNearlyEqual(TimeInSeconds, 600.0, 0.034))
+    // 주요 시간 경계에서 결과 확인을 위한 로깅
+    if (FMath::IsNearlyEqual(TimeInSeconds, 600.0, 0.05) ||    // 10분 경계
+        FMath::IsNearlyEqual(TimeInSeconds, 60.0, 0.05) ||     // 1분 경계
+        FMath::IsNearlyEqual(TimeInSeconds, 61.0, 0.05) ||     // 1분 1초
+        FMath::IsNearlyEqual(TimeInSeconds, 660.0, 0.05))      // 11분 경계
     {
-        UE_LOG(LogSMPTEConverter, Verbose, TEXT("Exact 10-minute boundary detected: %02d:%02d:%02d;%02d"),
-            Hours, Minutes, Seconds, Frames);
+        UE_LOG(LogSMPTEConverter, Log, TEXT("Significant timecode boundary: %.3f seconds -> %02d:%02d:%02d;%02d"),
+            TimeInSeconds, Hours, Minutes, Seconds, Frames);
     }
 
     // Drop frame timecode uses semicolon (;)
-    return FString::Printf(TEXT("%02d:%02d:%02d;%02d"), Hours, Minutes, Seconds, Frames);
+    FString ResultTimecode = FString::Printf(TEXT("%02d:%02d:%02d;%02d"), Hours, Minutes, Seconds, Frames);
+
+    // 계산 결과 캐싱
+    LastTimeInSeconds = TimeInSeconds;
+    LastFrameRate = FrameRate;
+    LastUseDropFrame = bUseDropFrame;
+    CachedTimecode = ResultTimecode;
+
+    UE_LOG(LogSMPTEConverter, Verbose, TEXT("Final timecode result: %s"), *ResultTimecode);
+    return ResultTimecode;
 }
 
 float USMPTETimecodeConverter::TimecodeToSeconds(const FString& Timecode, float FrameRate, bool bUseDropFrame)
@@ -179,18 +202,31 @@ float USMPTETimecodeConverter::TimecodeToSeconds(const FString& Timecode, float 
             FRAMERATE_29_97 : FRAMERATE_59_94;
         int32 DropFrames = (FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f)) ? 2 : 4;
 
-        // Calculate total minutes and adjust for drop frame
-        int64 TotalMinutes = Hours * 60 + Minutes;
-        int64 NonDropMinutes = TotalMinutes - TotalMinutes / 10;
-
-        // Calculate total frames
+        // 총 프레임 수 계산 (드롭 프레임 조정 없이)
         int64 TotalFrames = Hours * static_cast<int64>(ActualFrameRate * 3600.0) +
             Minutes * static_cast<int64>(ActualFrameRate * 60.0) +
             Seconds * static_cast<int64>(ActualFrameRate) +
             Frames;
 
-        // Apply drop frame adjustment
-        TotalFrames += NonDropMinutes * DropFrames;
+        // 드롭 프레임 보정을 위한 계산 (SecondsToTimecode의 역연산)
+        int64 TotalMinutes = Hours * 60 + Minutes;
+        int64 TenMinBlocks = TotalMinutes / 10;
+        int64 RemainingMinutes = TotalMinutes % 10;
+
+        // 10분 블록마다 9개 분에서 프레임 드롭 발생
+        int64 DropFrameMinutes = TenMinBlocks * 9;
+
+        // 추가로, 현재 10분 블록에서 남은 분 중 첫 번째를 제외한 분에서 드롭 발생
+        if (RemainingMinutes > 0)
+        {
+            DropFrameMinutes += RemainingMinutes - 1;
+        }
+
+        // 드롭된 프레임 복원 (역방향 보정)
+        TotalFrames += DropFrameMinutes * DropFrames;
+
+        UE_LOG(LogSMPTEConverter, Verbose, TEXT("TimecodeToSeconds: Frames=%lld, TotalMinutes=%lld, DropFrameMinutes=%lld, Added=%lld"),
+            TotalFrames, TotalMinutes, DropFrameMinutes, DropFrameMinutes * DropFrames);
 
         // Convert frames to seconds
         double TotalSeconds = static_cast<double>(TotalFrames) / ActualFrameRate;
@@ -291,18 +327,33 @@ int64 USMPTETimecodeConverter::CalculateDropFrameAdjustment(int64 TotalFrames, f
         DropFrames = 4;
     }
 
+    // Calculate frames per time unit
     int64 FramesPerSecond = static_cast<int64>(ActualFrameRate + 0.5);
     int64 FramesPerMinute = FramesPerSecond * 60;
     int64 FramesPer10Minutes = FramesPerMinute * 10;
 
+    // Calculate 10-minute blocks and remaining frames
     int64 TenMinBlocks = TotalFrames / FramesPer10Minutes;
     int64 RemainingFrames = TotalFrames % FramesPer10Minutes;
 
+    // Calculate minutes within the remaining portion of the 10-minute block
     int64 MinutesInRemainder = 0;
     if (RemainingFrames >= FramesPerMinute)
     {
+        // First minute doesn't have frame drops, for the rest calculate how many whole minutes
         MinutesInRemainder = (RemainingFrames - FramesPerMinute) / (FramesPerMinute - DropFrames) + 1;
+
+        // Cap at 9 (a 10-minute block has at most 9 minutes with frame drops)
+        MinutesInRemainder = FMath::Min(MinutesInRemainder, 9LL);
     }
 
-    return DropFrames * (TenMinBlocks * 9 + MinutesInRemainder);
+    // Calculate total adjustment: 
+    // - Each complete 10-minute block: 9 minutes with drops (DropFrames * 9)
+    // - Plus minutes with drops in the current incomplete 10-minute block
+    int64 Adjustment = DropFrames * (TenMinBlocks * 9 + MinutesInRemainder);
+
+    UE_LOG(LogSMPTEConverter, Verbose, TEXT("Drop frame adjustment calculation: TotalFrames=%lld, Blocks=%lld, MinutesInRemainder=%lld, Adjustment=%lld"),
+        TotalFrames, TenMinBlocks, MinutesInRemainder, Adjustment);
+
+    return Adjustment;
 }
