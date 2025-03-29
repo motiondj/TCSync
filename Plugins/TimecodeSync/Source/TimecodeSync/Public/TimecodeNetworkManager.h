@@ -243,4 +243,7 @@ private:
     void UpdatePLL(double MasterTime, double LocalTime);
     double GetPLLCorrectedTime(double LocalTime) const;
     void InitializePLL();
+
+    // 종료 중인지 표시하는 플래그 추가
+    bool bIsShuttingDown;
 };

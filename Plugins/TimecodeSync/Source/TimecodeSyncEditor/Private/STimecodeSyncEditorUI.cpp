@@ -76,15 +76,34 @@ void STimecodeSyncEditorUI::Construct(const FArguments& InArgs)
 // 소멸자 수정
 STimecodeSyncEditorUI::~STimecodeSyncEditorUI()
 {
-    // 타이머 중지 먼저 수행하여 UI 업데이트 멈춤
+    // 먼저 모든 예약된 틱 이벤트를 처리하지 않도록 설정
     if (TickDelegateHandle.IsValid())
     {
         FTSTicker::GetCoreTicker().RemoveTicker(TickDelegateHandle);
         TickDelegateHandle.Reset();
     }
 
-    // 타임코드 매니저 종료
-    ShutdownTimecodeManager();
+    // 델리게이트 바인딩 해제를 명시적으로 먼저 처리
+    if (TimecodeManager && DelegateHandler)
+    {
+        TimecodeManager->OnTimecodeMessageReceived.RemoveAll(DelegateHandler);
+        TimecodeManager->OnNetworkStateChanged.RemoveAll(DelegateHandler);
+    }
+
+    // 이제 타임코드 매니저 종료
+    if (TimecodeManager)
+    {
+        TimecodeManager->Shutdown();
+        TimecodeManager->RemoveFromRoot(); // 새로 추가된 부분
+        TimecodeManager = nullptr;
+    }
+
+    // 마지막으로 델리게이트 핸들러 정리
+    if (DelegateHandler)
+    {
+        DelegateHandler->RemoveFromRoot(); // 새로 추가된 부분
+        DelegateHandler = nullptr;
+    }
 }
 
 
@@ -101,11 +120,16 @@ void STimecodeSyncEditorUI::ShutdownTimecodeManager()
     if (TimecodeManager != nullptr)
     {
         TimecodeManager->Shutdown();
+        TimecodeManager->RemoveFromRoot();
         TimecodeManager = nullptr;
     }
 
     // 델리게이트 핸들러 정리
-    DelegateHandler = nullptr;
+    if (DelegateHandler != nullptr)
+    {
+        DelegateHandler->RemoveFromRoot();
+        DelegateHandler = nullptr;
+    }
 }
 
 TSharedRef<SWidget> STimecodeSyncEditorUI::CreateContentArea()
@@ -851,7 +875,8 @@ void STimecodeSyncEditorUI::UpdateUI()
     }
 
     // 타임코드 매니저로부터 정보 가져오기
-    bool bHasValidCommunication = TimecodeManager->HasReceivedValidMessage();
+    // 'bHasValidCommunication' 변수가 선언되지 않았으므로 직접 호출하도록 수정
+    bool bHasValidMessage = TimecodeManager->HasReceivedValidMessage();
     ENetworkConnectionState CurrentConnectionState = TimecodeManager->GetConnectionState();
     bool bCurrentIsMaster = TimecodeManager->IsMaster();
     FString CurrentTimecodeValue = TimecodeManager->GetCurrentTimecode();
@@ -894,7 +919,7 @@ void STimecodeSyncEditorUI::UpdateUI()
     }
 
     // 통신 상태에 따른 추가 메시지
-    if (!bHasValidCommunication && ConnectionState == ENetworkConnectionState::Connected)
+    if (!bHasValidMessage && ConnectionState == ENetworkConnectionState::Connected)
     {
         StatusMessage = FText::FromString(TEXT("Connected but no sync data received"));
     }
@@ -1048,25 +1073,44 @@ void STimecodeSyncEditorUI::InitializeTimecodeManager()
         return;
     }
 
+    // GC 방지를 위해 Root에 추가
+    DelegateHandler->AddToRoot();
+
     // 타임코드 매니저 생성
     TimecodeManager = NewObject<UTimecodeNetworkManager>();
     if (!TimecodeManager)
     {
+        // 정리
+        if (DelegateHandler)
+        {
+            DelegateHandler->RemoveFromRoot();
+            DelegateHandler = nullptr;
+        }
+
         StatusMessage = FText::FromString(TEXT("Failed to create timecode manager"));
-        DelegateHandler = nullptr;
         return;
     }
 
-    // 콜백 함수 설정
-    DelegateHandler->SetTimecodeMessageCallback([this](const FTimecodeNetworkMessage& Message) {
-        this->OnTimecodeMessageReceived(Message);
-        });
+    // GC 방지를 위해 Root에 추가
+    TimecodeManager->AddToRoot();
 
-    DelegateHandler->SetNetworkStateCallback([this](ENetworkConnectionState NewState) {
-        this->OnNetworkStateChanged(NewState);
-        });
+    // 콜백 함수 설정 (약한 참조 사용) - 변수명 변경
+    TWeakPtr<STimecodeSyncEditorUI> WeakSelf = SharedThis(this);
+    DelegateHandler->SetTimecodeMessageCallback([WeakSelf](const FTimecodeNetworkMessage& Message) {
+        if (WeakSelf.IsValid())
+        {
+            WeakSelf.Pin()->OnTimecodeMessageReceived(Message);
+        }
+    });
 
-    // 바인딩
+    DelegateHandler->SetNetworkStateCallback([WeakSelf](ENetworkConnectionState NewState) {
+        if (WeakSelf.IsValid())
+        {
+            WeakSelf.Pin()->OnNetworkStateChanged(NewState);
+        }
+    });
+
+    // 바인딩 - 약한 참조 사용
     TimecodeManager->OnTimecodeMessageReceived.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleTimecodeMessage);
     TimecodeManager->OnNetworkStateChanged.AddDynamic(DelegateHandler, &UTimecodeSyncEditorDelegateHandler::HandleNetworkStateChanged);
 

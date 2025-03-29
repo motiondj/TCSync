@@ -47,20 +47,35 @@ void FTimecodeSyncEditorModule::ShutdownModule()
     UE_LOG(LogTemp, Warning, TEXT("TimecodeSyncEditor module shutting down"));
 
     // Unregister tab spawner first
-    FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TimecodeSyncTabId);
+    if (FGlobalTabmanager::Get()->FindTabSpawnerFor(TimecodeSyncTabId))
+    {
+        FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TimecodeSyncTabId);
+    }
 
     // Unregister menus
-    UToolMenus::UnRegisterStartupCallback(this);
-    UToolMenus::UnregisterOwner(this);
-
-    // Clean up command list
-    if (FTimecodeSyncEditorCommands::Get().CommandList.IsValid())
+    if (UToolMenus::IsToolMenuUIEnabled())
     {
-        FTimecodeSyncEditorCommands::Get().CommandList.Reset();
+        UToolMenus::UnRegisterStartupCallback(this);
+        UToolMenus::UnregisterOwner(this);
+    }
+
+    // Clean up command list - 더 안전한 방식으로 수정
+    TSharedPtr<FUICommandList> CommandListPtr;
+    if (FTimecodeSyncEditorCommands::IsRegistered())
+    {
+        CommandListPtr = FTimecodeSyncEditorCommands::Get().CommandList;
+        if (CommandListPtr.IsValid())
+        {
+            CommandListPtr.Reset();
+            FTimecodeSyncEditorCommands::Get().CommandList = nullptr;
+        }
     }
 
     // Unregister commands
-    FTimecodeSyncEditorCommands::Unregister();
+    if (FTimecodeSyncEditorCommands::IsRegistered())
+    {
+        FTimecodeSyncEditorCommands::Unregister();
+    }
 
     // Clean up styles last
     FTimecodeSyncEditorStyle::Shutdown();

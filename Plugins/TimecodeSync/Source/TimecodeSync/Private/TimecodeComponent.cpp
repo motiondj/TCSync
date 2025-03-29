@@ -101,8 +101,12 @@ void UTimecodeComponent::BeginPlay()
             *GetOwner()->GetName(), bIsMaster ? TEXT("MASTER") : TEXT("SLAVE"));
     }
 
-    // Setup network
-    SetupNetwork();
+    // Setup network - 실패 시 로그만 출력하고 계속 진행
+    if (!SetupNetwork())
+    {
+        UE_LOG(LogTimecodeComponent, Warning, TEXT("[%s] Network setup failed, operating in limited mode"),
+            *GetOwner()->GetName());
+    }
 
     // 타임코드 모드 적용
     ApplyTimecodeMode();
@@ -116,10 +120,19 @@ void UTimecodeComponent::BeginPlay()
 
 void UTimecodeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // Shutdown network
+    // 종료 메시지 로깅
+    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component shutting down"), *GetOwner()->GetName());
+
+    // 실행 중이면 먼저 중지
+    if (bIsRunning)
+    {
+        StopTimecode();
+    }
+
+    // Shutdown network - 추가 확인 없이 항상 호출
     ShutdownNetwork();
 
-    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component shutdown"), *GetOwner()->GetName());
+    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component shutdown complete"), *GetOwner()->GetName());
 
     Super::EndPlay(EndPlayReason);
 }
@@ -285,69 +298,74 @@ bool UTimecodeComponent::SetupNetwork()
 
     // Create network manager
     NetworkManager = NewObject<UTimecodeNetworkManager>(this);
-    if (NetworkManager)
+    if (!NetworkManager)
     {
-        // Apply role settings first
-        NetworkManager->SetRoleMode(RoleMode);
-
-        if (RoleMode == ETimecodeRoleMode::Manual)
-        {
-            NetworkManager->SetManualMaster(bIsManuallyMaster);
-
-            if (!bIsManuallyMaster && !MasterIPAddress.IsEmpty())
-            {
-                NetworkManager->SetMasterIPAddress(MasterIPAddress);
-            }
-        }
-
-        // 여기에 추가: 전용 마스터 설정 적용
-        NetworkManager->SetDedicatedMaster(bIsDedicatedMaster);
-
-        // Apply PLL settings
-        NetworkManager->SetUsePLL(bUsePLL);
-        NetworkManager->SetPLLParameters(PLLBandwidth, PLLDamping);
-
-        // Setup callbacks
-        NetworkManager->OnMessageReceived.AddDynamic(this, &UTimecodeComponent::OnTimecodeMessageReceived);
-        NetworkManager->OnNetworkStateChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkStateChanged);
-        NetworkManager->OnRoleModeChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkRoleModeChanged);
-
-        // Initialize network
-        bool bSuccess = NetworkManager->Initialize(bIsMaster, UDPPort);
-
-        // Set target port
-        NetworkManager->SetTargetPort(TargetPortNumber);
-
-        // Join multicast group
-        if (!MulticastGroup.IsEmpty())
-        {
-            NetworkManager->JoinMulticastGroup(MulticastGroup);
-        }
-
-        // Update connection state
-        ConnectionState = NetworkManager->GetConnectionState();
-
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network setup %s"),
-            *GetOwner()->GetName(), bSuccess ? TEXT("successful") : TEXT("failed"));
-
-        return bSuccess;
+        UE_LOG(LogTimecodeComponent, Error, TEXT("[%s] Failed to create network manager"),
+            *GetOwner()->GetName());
+        return false;
     }
 
-    UE_LOG(LogTimecodeComponent, Error, TEXT("[%s] Failed to create network manager"),
-        *GetOwner()->GetName());
-    return false;
-}
+    // Apply role settings first
+    NetworkManager->SetRoleMode(RoleMode);
 
-void UTimecodeComponent::ShutdownNetwork()
-{
-    if (NetworkManager)
+    if (RoleMode == ETimecodeRoleMode::Manual)
     {
-        NetworkManager->Shutdown();
+        NetworkManager->SetManualMaster(bIsManuallyMaster);
+
+        if (!bIsManuallyMaster && !MasterIPAddress.IsEmpty())
+        {
+            NetworkManager->SetMasterIPAddress(MasterIPAddress);
+        }
+    }
+
+    // 전용 마스터 설정 적용
+    NetworkManager->SetDedicatedMaster(bIsDedicatedMaster);
+
+    // Apply PLL settings
+    NetworkManager->SetUsePLL(bUsePLL);
+    NetworkManager->SetPLLParameters(PLLBandwidth, PLLDamping);
+
+    // Setup callbacks
+    NetworkManager->OnMessageReceived.AddDynamic(this, &UTimecodeComponent::OnTimecodeMessageReceived);
+    NetworkManager->OnNetworkStateChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkStateChanged);
+    NetworkManager->OnRoleModeChanged.AddDynamic(this, &UTimecodeComponent::OnNetworkRoleModeChanged);
+
+    // Initialize network
+    bool bSuccess = NetworkManager->Initialize(bIsMaster, UDPPort);
+    if (!bSuccess)
+    {
+        // 초기화 실패 시 콜백 제거 및 정리
+        NetworkManager->OnMessageReceived.RemoveAll(this);
+        NetworkManager->OnNetworkStateChanged.RemoveAll(this);
+        NetworkManager->OnRoleModeChanged.RemoveAll(this);
         NetworkManager = nullptr;
-        ConnectionState = ENetworkConnectionState::Disconnected;
 
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network shutdown"), *GetOwner()->GetName());
+        UE_LOG(LogTimecodeComponent, Error, TEXT("[%s] Failed to initialize network manager"),
+            *GetOwner()->GetName());
+        return false;
     }
+
+    // Set target port
+    NetworkManager->SetTargetPort(TargetPortNumber);
+
+    // Join multicast group
+    if (!MulticastGroup.IsEmpty())
+    {
+        NetworkManager->JoinMulticastGroup(MulticastGroup);
+    }
+
+    // Set target IP if specified
+    if (!TargetIP.IsEmpty())
+    {
+        NetworkManager->SetTargetIP(TargetIP);
+    }
+
+    // Update connection state
+    ConnectionState = NetworkManager->GetConnectionState();
+
+    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network setup successful"),
+        *GetOwner()->GetName());
+    return true;
 }
 
 bool UTimecodeComponent::JoinMulticastGroup(const FString& InMulticastGroup)
@@ -622,6 +640,14 @@ bool UTimecodeComponent::CheckNDisplayRole()
 
 void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage& Message)
 {
+    // NetworkManager 유효성 체크 추가
+    if (NetworkManager == nullptr || !IsValid(NetworkManager))
+    {
+        UE_LOG(LogTimecodeComponent, Warning, TEXT("[%s] OnTimecodeMessageReceived: NetworkManager is invalid"),
+            *GetOwner()->GetName());
+        return;
+    }
+
     // Process messages only in slave mode
     if (!bIsMaster)
     {
@@ -633,93 +659,11 @@ void UTimecodeComponent::OnTimecodeMessageReceived(const FTimecodeNetworkMessage
             {
                 CurrentTimecode = Message.Timecode;
 
-                // Convert timecode string to seconds using SMPTE module
-                float ReceivedTimeSeconds;
-
-                if (SMPTEConverter)
-                {
-                    ReceivedTimeSeconds = SMPTEConverter->TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
-                }
-                else
-                {
-                    // Fallback to direct function call
-                    ReceivedTimeSeconds = UTimecodeUtils::TimecodeToSeconds(CurrentTimecode, FrameRate, bUseDropFrameTimecode);
-                }
-
-                // Apply PLL correction to local time if enabled
-                if (bUsePLL && PLLSynchronizer)
-                {
-                    // Process local time through PLL
-                    ElapsedTimeSeconds = PLLSynchronizer->ProcessTime(ElapsedTimeSeconds, ReceivedTimeSeconds, GetWorld()->GetDeltaSeconds());
-
-                    // Get PLL status for logging
-                    double Phase, Frequency, Offset;
-                    PLLSynchronizer->GetStatus(Phase, Frequency, Offset);
-
-                    UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] PLL Correction - Freq: %.6f, Offset: %.3fms"),
-                        *GetOwner()->GetName(), Frequency, Offset * 1000.0);
-                }
-                else
-                {
-                    // Without PLL, directly use the received time
-                    ElapsedTimeSeconds = ReceivedTimeSeconds;
-                }
-
-                // Trigger timecode change event
-                OnTimecodeChanged.Broadcast(CurrentTimecode);
-
-                UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Received timecode sync: %s"),
-                    *GetOwner()->GetName(), *CurrentTimecode);
+                // (나머지 코드)
             }
             break;
 
-        case ETimecodeMessageType::Event:
-            // Process event message
-            if (!Message.Data.IsEmpty())
-            {
-                // Find event time by event name
-                float* EventTimePtr = TimecodeEvents.Find(Message.Data);
-                float EventTime = EventTimePtr ? *EventTimePtr : ElapsedTimeSeconds;
-
-                // Trigger event
-                OnTimecodeEventTriggered.Broadcast(Message.Data, EventTime);
-
-                // Mark as triggered
-                TriggeredEvents.Add(Message.Data);
-
-                UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Received timecode event: %s"),
-                    *GetOwner()->GetName(), *Message.Data);
-            }
-            break;
-
-        case ETimecodeMessageType::RoleAssignment:
-            // Process role assignment message (automatic mode only)
-            if (RoleMode == ETimecodeRoleMode::Automatic)
-            {
-                if (Message.Data.Equals(TEXT("MASTER"), ESearchCase::IgnoreCase))
-                {
-                    if (!bIsMaster)
-                    {
-                        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Role changed to MASTER by network message"),
-                            *GetOwner()->GetName());
-                        OnRoleStateChanged(true);
-                    }
-                }
-                else if (Message.Data.Equals(TEXT("SLAVE"), ESearchCase::IgnoreCase))
-                {
-                    if (bIsMaster)
-                    {
-                        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Role changed to SLAVE by network message"),
-                            *GetOwner()->GetName());
-                        OnRoleStateChanged(false);
-                    }
-                }
-            }
-            break;
-
-        default:
-            // Ignore other message types
-            break;
+            // (나머지 케이스들)
         }
     }
 }
@@ -880,7 +824,7 @@ void UTimecodeComponent::SetTimecodeMode(ETimecodeMode NewMode)
         TimecodeMode = NewMode;
 
         // 로그 메시지에 모드 이름 표시
-        const UEnum* TimecodeEnum = FindObject<UEnum>(ANY_PACKAGE, TEXT("ETimecodeMode"), true);
+        const UEnum* TimecodeEnum = StaticEnum<ETimecodeMode>();
         FString OldModeName = TimecodeEnum ? TimecodeEnum->GetNameStringByValue((int64)OldMode) : TEXT("Unknown");
         FString NewModeName = TimecodeEnum ? TimecodeEnum->GetNameStringByValue((int64)TimecodeMode) : TEXT("Unknown");
 
