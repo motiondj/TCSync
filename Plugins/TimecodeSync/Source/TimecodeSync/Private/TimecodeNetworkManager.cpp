@@ -70,11 +70,11 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
     ConnectionState = ENetworkConnectionState::Disconnected;
     bHasReceivedValidMessage = false;
 
-    // 먼저 포트 번호 설정
+    // Set the receive port for listening to incoming messages
     ReceivePortNumber = Port;
 
-    // Send Port는 기본적으로 Receive Port + 1
-    if (SendPortNumber == 0)  // 타겟 포트가 설정되지 않은 경우만
+    // Default send port is receive port + 1 if not already set
+    if (SendPortNumber == 0)
     {
         SendPortNumber = Port + 1;
     }
@@ -523,6 +523,7 @@ ENetworkConnectionState UTimecodeNetworkManager::GetConnectionState() const
 
 bool UTimecodeNetworkManager::CreateSocket()
 {
+    // Get socket subsystem
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (SocketSubsystem == nullptr)
     {
@@ -530,7 +531,7 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // Create UDP socket
+    // Create UDP socket with datagram socket type
     Socket = SocketSubsystem->CreateSocket(NAME_DGram, TEXT("TimecodeSocket"), true);
     if (Socket == nullptr)
     {
@@ -538,28 +539,27 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // Set socket options
-    Socket->SetReuseAddr();
-    Socket->SetRecvErr();
-    Socket->SetNonBlocking();
+    // Set socket options for better performance
+    Socket->SetReuseAddr();  // Allow socket to bind to an address that is already in use
+    Socket->SetRecvErr();    // Receive error messages
+    Socket->SetNonBlocking(); // Non-blocking mode for async operation
+    Socket->SetBroadcast();  // Enable broadcast capability
 
-    // Set broadcast
-    Socket->SetBroadcast();
-
-    // Set local address
+    // Set local address for binding
     TSharedRef<FInternetAddr> LocalAddr = SocketSubsystem->CreateInternetAddr();
-    LocalAddr->SetAnyAddress();
-    LocalAddr->SetPort(ReceivePortNumber);  // 이름 변경
+    LocalAddr->SetAnyAddress(); // Bind to any available network interface
+    LocalAddr->SetPort(ReceivePortNumber); // Set the port to listen on
 
+    // Bind socket to the specified port
     if (!Socket->Bind(*LocalAddr))
     {
-        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to bind socket to port %d"), ReceivePortNumber);  // 이름 변경
+        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to bind socket to port %d"), ReceivePortNumber);
         SocketSubsystem->DestroySocket(Socket);
         Socket = nullptr;
         return false;
     }
 
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("UDP socket created and bound to receive port %d"), ReceivePortNumber);  // 이름 변경 및 주석 명확화
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("UDP socket created and bound to receive port %d"), ReceivePortNumber);
     return true;
 }
 
@@ -883,8 +883,9 @@ bool UTimecodeNetworkManager::TestPacketLossHandling(float SimulatedPacketLossRa
 
 void UTimecodeNetworkManager::SetTargetPort(int32 Port)
 {
-    SendPortNumber = Port;  // 이름 변경
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("Send port set to: %d"), SendPortNumber);  // 이름 변경
+    // Set the port number to which outgoing messages will be sent
+    SendPortNumber = Port;
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("Target send port set to: %d"), SendPortNumber);
 }
 
 int32 UTimecodeNetworkManager::GetTargetPort() const

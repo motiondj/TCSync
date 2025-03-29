@@ -174,8 +174,11 @@ private:
     // Sender ID (unique identifier)
     FString InstanceID;
 
-    // Port number
+    /** Port used for receiving incoming messages from network */
     int32 ReceivePortNumber;
+
+    /** Port used when sending outgoing messages to target devices */
+    int32 SendPortNumber; // 또는 TargetPortNumber
 
     // Target IP address
     FString TargetIPAddress;
