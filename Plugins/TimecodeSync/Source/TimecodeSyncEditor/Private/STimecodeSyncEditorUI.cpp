@@ -447,7 +447,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
                         ]
                 ]
 
-                // UDP Port
+                // Receive Port (수신 포트) - 명확한 레이블링
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)
@@ -459,8 +459,9 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
                         .Padding(0, 0, 10, 0)
                         [
                             SNew(STextBlock)
-                                .Text(LOCTEXT("UDPPort", "UDP Port:"))
+                                .Text(LOCTEXT("ReceivePort", "Receive Port:"))
                                 .MinDesiredWidth(120)
+                                .ToolTipText(LOCTEXT("ReceivePortTooltip", "Port used for receiving incoming messages (this device listens on this port)"))
                         ]
                         + SHorizontalBox::Slot()
                         .FillWidth(1.0f)
@@ -479,6 +480,42 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
                                     SaveSettings();
                                 }
                                     })
+                        ]
+                ]
+
+                // Send Port (송신 포트) - 새로 추가
+                + SVerticalBox::Slot()
+                .AutoHeight()
+                .Padding(0, 5)
+                [
+                    SNew(SHorizontalBox)
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(0, 0, 10, 0)
+                        [
+                            SNew(STextBlock)
+                                .Text(LOCTEXT("SendPort", "Send Port:"))
+                                .MinDesiredWidth(120)
+                                .ToolTipText(LOCTEXT("SendPortTooltip", "Port used for sending outgoing messages to target devices"))
+                        ]
+                        + SHorizontalBox::Slot()
+                        .FillWidth(1.0f)
+                        [
+                            SNew(SSpinBox<int32>)
+                                .MinValue(1024)
+                                .MaxValue(65535)
+                                .Value_Lambda([this]() -> int32 {
+                                // 기본적으로 수신 포트 + 1
+                                UTimecodeSettings* Settings = GetTimecodeSettings();
+                                return Settings ? (Settings->DefaultUDPPort + 1) : 10001;
+                                    })
+                                .OnValueChanged_Lambda([this](int32 NewValue) {
+                                if (TimecodeManager) {
+                                    TimecodeManager->SetTargetPort(NewValue);
+                                }
+                                    })
+                                .ToolTipText(LOCTEXT("SendPortValueTooltip", "Typically set to Receive Port + 1"))
                         ]
                 ]
 
@@ -518,7 +555,7 @@ TSharedRef<SWidget> STimecodeSyncEditorUI::CreateNetworkSettingsSection()
                         ]
                 ]
 
-                // Broadcast Interval
+                // Sync Interval
                 + SVerticalBox::Slot()
                 .AutoHeight()
                 .Padding(0, 5)

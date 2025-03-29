@@ -523,7 +523,6 @@ ENetworkConnectionState UTimecodeNetworkManager::GetConnectionState() const
 
 bool UTimecodeNetworkManager::CreateSocket()
 {
-    // Get socket subsystem
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (SocketSubsystem == nullptr)
     {
@@ -531,35 +530,62 @@ bool UTimecodeNetworkManager::CreateSocket()
         return false;
     }
 
-    // Create UDP socket with datagram socket type
-    Socket = SocketSubsystem->CreateSocket(NAME_DGram, TEXT("TimecodeSocket"), true);
-    if (Socket == nullptr)
+    // 포트 충돌 해결을 위한 최대 시도 횟수
+    const int32 MaxPortAttempts = 5;
+    int32 CurrentPort = ReceivePortNumber;
+    bool bSocketCreated = false;
+
+    for (int32 Attempt = 0; Attempt < MaxPortAttempts; ++Attempt)
     {
-        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to create UDP socket"));
+        // Create UDP socket
+        Socket = SocketSubsystem->CreateSocket(NAME_DGram, TEXT("TimecodeSocket"), true);
+        if (Socket == nullptr)
+        {
+            UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to create UDP socket"));
+            return false;
+        }
+
+        // Set socket options
+        Socket->SetReuseAddr();
+        Socket->SetRecvErr();
+        Socket->SetNonBlocking();
+        Socket->SetBroadcast();
+
+        // Set local address
+        TSharedRef<FInternetAddr> LocalAddr = SocketSubsystem->CreateInternetAddr();
+        LocalAddr->SetAnyAddress();
+        LocalAddr->SetPort(CurrentPort);
+
+        // Try to bind socket
+        if (Socket->Bind(*LocalAddr))
+        {
+            // 성공적으로 바인딩됨
+            ReceivePortNumber = CurrentPort;  // 실제 사용된 포트 업데이트
+            bSocketCreated = true;
+            UE_LOG(LogTimecodeNetwork, Log, TEXT("UDP socket created and bound to port %d (attempt %d)"),
+                CurrentPort, Attempt + 1);
+            break;
+        }
+        else
+        {
+            // 바인딩 실패, 소켓 정리
+            UE_LOG(LogTimecodeNetwork, Warning, TEXT("Failed to bind socket to port %d, trying alternative port"),
+                CurrentPort);
+
+            SocketSubsystem->DestroySocket(Socket);
+            Socket = nullptr;
+
+            // 다음 포트 시도
+            CurrentPort++;
+        }
+    }
+
+    if (!bSocketCreated)
+    {
+        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to bind socket after %d attempts"), MaxPortAttempts);
         return false;
     }
 
-    // Set socket options for better performance
-    Socket->SetReuseAddr();  // Allow socket to bind to an address that is already in use
-    Socket->SetRecvErr();    // Receive error messages
-    Socket->SetNonBlocking(); // Non-blocking mode for async operation
-    Socket->SetBroadcast();  // Enable broadcast capability
-
-    // Set local address for binding
-    TSharedRef<FInternetAddr> LocalAddr = SocketSubsystem->CreateInternetAddr();
-    LocalAddr->SetAnyAddress(); // Bind to any available network interface
-    LocalAddr->SetPort(ReceivePortNumber); // Set the port to listen on
-
-    // Bind socket to the specified port
-    if (!Socket->Bind(*LocalAddr))
-    {
-        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to bind socket to port %d"), ReceivePortNumber);
-        SocketSubsystem->DestroySocket(Socket);
-        Socket = nullptr;
-        return false;
-    }
-
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("UDP socket created and bound to receive port %d"), ReceivePortNumber);
     return true;
 }
 
