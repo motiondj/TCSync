@@ -902,34 +902,63 @@ ETimecodeMode UTimecodeComponent::GetTimecodeMode() const
 
 void UTimecodeComponent::ApplyTimecodeMode()
 {
+    // 이전 모드 저장 (디버깅용)
+    ETimecodeMode PreviousMode = TimecodeMode;
+
     // 모드에 따라 컴포넌트 설정 변경
     switch (TimecodeMode)
     {
     case ETimecodeMode::PLL_Only:
         bUsePLL = true;
         bUseDropFrameTimecode = false;
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL Only mode: PLL enabled, Drop Frame disabled"),
+
+        // PLL 모드 최적화 설정
+        if (PLLSynchronizer)
+        {
+            // PLL 대역폭을 약간 높게 설정 (더 빠른 동기화)
+            PLLSynchronizer->SetParameters(FMath::Min(PLLBandwidth * 1.2f, 0.5f), PLLDamping);
+        }
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] PLL Only mode applied: PLL enabled, Drop Frame disabled, PLL responsiveness increased"),
             *GetOwner()->GetName());
         break;
 
     case ETimecodeMode::SMPTE_Only:
         bUsePLL = false;
         bUseDropFrameTimecode = true;
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] SMPTE Only mode: PLL disabled, Drop Frame enabled"),
+
+        // SMPTE 모드에서는 정확한 프레임 레이트 확인
+        if (!FMath::IsNearlyEqual(FrameRate, 29.97f, 0.01f) &&
+            !FMath::IsNearlyEqual(FrameRate, 59.94f, 0.01f) &&
+            bUseDropFrameTimecode)
+        {
+            UE_LOG(LogTimecodeComponent, Warning, TEXT("[%s] Drop frame is only applicable to 29.97fps or 59.94fps! Current: %.2ffps"),
+                *GetOwner()->GetName(), FrameRate);
+        }
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] SMPTE Only mode applied: PLL disabled, Drop Frame enabled"),
             *GetOwner()->GetName());
         break;
 
     case ETimecodeMode::Integrated:
         bUsePLL = true;
         bUseDropFrameTimecode = true;
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Integrated mode: PLL enabled, Drop Frame enabled"),
+
+        // 통합 모드에서는 균형 잡힌 PLL 설정
+        if (PLLSynchronizer)
+        {
+            PLLSynchronizer->SetParameters(PLLBandwidth, PLLDamping);
+        }
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Integrated mode applied: PLL enabled, Drop Frame enabled, balanced settings"),
             *GetOwner()->GetName());
         break;
 
     case ETimecodeMode::Raw:
         bUsePLL = false;
         bUseDropFrameTimecode = false;
-        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Raw mode: PLL disabled, Drop Frame disabled"),
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Raw mode applied: No processing, using system time directly"),
             *GetOwner()->GetName());
         break;
     }
@@ -940,7 +969,7 @@ void UTimecodeComponent::ApplyTimecodeMode()
         NetworkManager->SetUsePLL(bUsePLL);
     }
 
-    // PLL 모듈 직접 설정 - 추가됨
+    // PLL 모듈 직접 설정
     if (PLLSynchronizer)
     {
         // PLL 모듈 상태 초기화 (모드가 변경되면 이전 상태 초기화)
@@ -951,6 +980,18 @@ void UTimecodeComponent::ApplyTimecodeMode()
         else
         {
             PLLSynchronizer->Reset();
+        }
+    }
+
+    // 모드 변경 이벤트 발생 (이미 타임코드 컴포넌트에 구현됨)
+    if (PreviousMode != TimecodeMode)
+    {
+        // 이 함수가 SetTimecodeMode에서 호출될 때는 이미 이벤트가 발생하므로
+        // 이중 이벤트 발생을 방지하기 위한 체크
+        if (OnTimecodeModeChanged.IsBound())
+        {
+            UE_LOG(LogTimecodeComponent, Verbose, TEXT("[%s] Mode changed event broadcasted: %d -> %d"),
+                *GetOwner()->GetName(), (int32)PreviousMode, (int32)TimecodeMode);
         }
     }
 }
