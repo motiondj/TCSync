@@ -37,9 +37,17 @@ UTimecodeNetworkManager::UTimecodeNetworkManager()
     , LastLocalTimestamp(0.0)     // 마지막 로컬 타임스탬프
     , bIsDedicatedMaster(false)  // 새로 추가한 부분
     , bIsShuttingDown(false)  // 새로 추가한 변수 초기화
+    , bMulticastEnabled(false)
 {
     // Basic initialization complete
     UE_LOG(LogTimecodeNetwork, Verbose, TEXT("TimecodeNetworkManager created with ID: %s"), *InstanceID);
+
+    // 연결 관리 초기화
+    ConnectionCheckTimer = 0.0f;
+    ConnectionRetryCount = 0;
+    ConnectionRetryInterval = 1.0f;
+    bConnectionLost = false;
+    LastMessageTime = FDateTime::Now();
 }
 
 UTimecodeNetworkManager::~UTimecodeNetworkManager()
@@ -50,7 +58,7 @@ UTimecodeNetworkManager::~UTimecodeNetworkManager()
 
 bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
 {
-    // 전용 마스터 모드가 활성화되면 항상 마스터로 설정
+    // 전용 마스터 모드 처리 (기존 코드 유지)
     if (bIsDedicatedMaster)
     {
         bIsMaster = true;
@@ -59,41 +67,40 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
         UE_LOG(LogTimecodeNetwork, Log, TEXT("Running in dedicated master server mode"));
     }
 
-    // Shutdown if already initialized - 더 안전한 체크 추가
+    // 이미 초기화된 경우 정리
     if (Socket != nullptr || Receiver != nullptr)
     {
-        UE_LOG(LogTimecodeNetwork, Warning, TEXT("TimecodeNetworkManager already initialized, shutting down first"));
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Already initialized, shutting down first"));
         Shutdown();
     }
 
-    // 초기화 전 상태 리셋
+    // 상태 초기화
     ConnectionState = ENetworkConnectionState::Disconnected;
     bHasReceivedValidMessage = false;
+    bMulticastEnabled = false; // 멀티캐스트는 기본적으로 비활성화
 
-    // Set the receive port for listening to incoming messages
+    // 포트 설정
     ReceivePortNumber = Port;
-
-    // Default send port is receive port + 1 if not already set
     if (SendPortNumber == 0)
     {
         SendPortNumber = Port + 1;
     }
 
-    // Determine role
+    // 역할 결정
     if (RoleMode == ETimecodeRoleMode::Automatic)
     {
         bIsMasterMode = AutoDetectRole();
         bRoleAutomaticallyDetermined = true;
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Automatic role detection: %s"), bIsMasterMode ? TEXT("MASTER") : TEXT("SLAVE"));
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Auto role detection: %s"), bIsMasterMode ? TEXT("MASTER") : TEXT("SLAVE"));
     }
     else // Manual mode
     {
         bIsMasterMode = bIsManuallyMaster;
         bRoleAutomaticallyDetermined = false;
-        UE_LOG(LogTimecodeNetwork, Log, TEXT("Manual role setting: %s"), bIsMasterMode ? TEXT("MASTER") : TEXT("SLAVE"));
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Manual role: %s"), bIsMasterMode ? TEXT("MASTER") : TEXT("SLAVE"));
     }
 
-    // 소켓 생성 전 시스템 검증
+    // 소켓 생성
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     if (!SocketSubsystem)
     {
@@ -101,14 +108,13 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
         return false;
     }
 
-    // Create socket
     if (!CreateSocket())
     {
         UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to create UDP socket"));
         return false;
     }
 
-    // Setup UDP reception - null 체크 추가
+    // UDP 수신 설정
     if (Socket)
     {
         FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(100);
@@ -124,7 +130,7 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
             if (Socket)
             {
                 Socket->Close();
-                ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);
+                SocketSubsystem->DestroySocket(Socket);
                 Socket = nullptr;
             }
             return false;
@@ -136,43 +142,48 @@ bool UTimecodeNetworkManager::Initialize(bool bIsMaster, int32 Port)
         return false;
     }
 
-    // Set connection state
+    // 멀티캐스트 설정 (기본 그룹이 설정된 경우)
+    if (!MulticastGroupAddress.IsEmpty())
+    {
+        // 멀티캐스트 그룹 참여 시도 - 실패해도 계속 진행 (폴백 메커니즘 사용)
+        JoinMulticastGroup(MulticastGroupAddress);
+    }
+
+    // 연결 상태 설정
     SetConnectionState(ENetworkConnectionState::Connected);
 
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("Network manager initialized in %s mode"), bIsMasterMode ? TEXT("Master") : TEXT("Slave"));
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("Network manager initialized: %s mode, Multicast %s"),
+        bIsMasterMode ? TEXT("Master") : TEXT("Slave"),
+        bMulticastEnabled ? TEXT("enabled") : TEXT("disabled"));
+
     return true;
 }
 
 void UTimecodeNetworkManager::Shutdown()
 {
-    // 연결 상태 초기화
+    // 즉시 종료 플래그 설정
+    bIsShuttingDown = true;
     bHasReceivedValidMessage = false;
 
-    // 메시지 처리 중단을 위한 플래그 설정 (추가 필요)
-    bIsShuttingDown = true;
+    // 진행 중인 콜백 완료를 위한 짧은 대기
+    FPlatformProcess::Sleep(0.1f);
 
-    // Stop reception
-    if (Receiver != nullptr)
+    // 리시버 정리
+    if (Receiver)
     {
         Receiver->Stop();
-
-        // 리시버 삭제 전 약간의 지연 추가 (진행 중인 콜백 완료 기다림)
-        FPlatformProcess::Sleep(0.05f);
-
         delete Receiver;
         Receiver = nullptr;
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("UDP receiver stopped"));
     }
 
-    // Clean up socket
-    if (Socket != nullptr)
+    // 소켓 정리
+    if (Socket)
     {
-        // 소켓 관련 작업 전 유효성 검증
         ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
         if (SocketSubsystem)
         {
-            // Leave multicast group
-            if (!MulticastGroupAddress.IsEmpty())
+            // 멀티캐스트 그룹 탈퇴 시도
+            if (!MulticastGroupAddress.IsEmpty() && bMulticastEnabled)
             {
                 TSharedRef<FInternetAddr> MulticastAddr = SocketSubsystem->CreateInternetAddr();
                 bool bIsValid = false;
@@ -181,24 +192,20 @@ void UTimecodeNetworkManager::Shutdown()
                 if (bIsValid)
                 {
                     Socket->LeaveMulticastGroup(*MulticastAddr);
-                    UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Left multicast group: %s"), *MulticastGroupAddress);
                 }
             }
 
             Socket->Close();
             SocketSubsystem->DestroySocket(Socket);
-            Socket = nullptr;
-            UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Socket closed and destroyed"));
         }
+
+        Socket = nullptr;
     }
 
-    // 리셋 플래그
-    bIsShuttingDown = false;
+    // 연결 상태 업데이트
+    ConnectionState = ENetworkConnectionState::Disconnected;
 
-    // Set connection state
-    SetConnectionState(ENetworkConnectionState::Disconnected);
-
-    UE_LOG(LogTimecodeNetwork, Log, TEXT("Network manager shutdown"));
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("Network manager shutdown complete"));
 }
 
 bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETimecodeMessageType MessageType)
@@ -209,86 +216,117 @@ bool UTimecodeNetworkManager::SendTimecodeMessage(const FString& Timecode, ETime
         return false;
     }
 
-    // Serialize message
+    // 메시지 준비
     FTimecodeNetworkMessage Message;
     Message.MessageType = MessageType;
     Message.Timecode = Timecode;
-
-    // PLL 적용된 타임스탬프 사용 (마스터 모드일 때)
     Message.Timestamp = FPlatformTime::Seconds();
     Message.SenderID = InstanceID;
-    Message.Data = TEXT(""); // Default data is empty string
+    Message.Data = TEXT("");
 
-    // Serialize message
     TArray<uint8> MessageData = Message.Serialize();
-
-    // Send message
     int32 BytesSent = 0;
+    bool bSendSuccess = false;
 
-    // Send directly to master IP if in manual mode and slave
+    // 송신 우선순위 결정:
+    // 1. 특정 대상 (수동 슬레이브 모드)
+    // 2. 멀티캐스트 (활성화된 경우)
+    // 3. 유니캐스트 (지정된 타겟 IP)
+    // 4. 브로드캐스트 (최후 수단)
+
+    // 1. 수동 슬레이브 모드에서 마스터로 직접 전송
     if (RoleMode == ETimecodeRoleMode::Manual && !bIsMasterMode && !MasterIPAddress.IsEmpty())
     {
-        TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
-        bool bIsValid = false;
-        TargetAddr->SetIp(*MasterIPAddress, bIsValid);
-
-        if (!bIsValid)
-        {
-            UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid Master IP: %s"), *MasterIPAddress);
-            return false;
-        }
-
-        TargetAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
-        Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
-
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message directly to Master: %s (Port: %d)"),
-            *UEnum::GetValueAsString(MessageType), *MasterIPAddress, SendPortNumber);
+        bSendSuccess = SendToSpecificIP(MessageData, MasterIPAddress, BytesSent,
+            FString::Printf(TEXT("Master (%s)"), *MasterIPAddress));
     }
-    // Use unicast if target IP is set
+    // 2. 멀티캐스트 모드 활성화된 경우
+    else if (bMulticastEnabled && !MulticastGroupAddress.IsEmpty())
+    {
+        bSendSuccess = SendToMulticastGroup(MessageData, BytesSent);
+    }
+    // 3. 유니캐스트 (지정된 타겟 IP)
     else if (!TargetIPAddress.IsEmpty())
     {
-        TSharedRef<FInternetAddr> TargetAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
-        bool bIsValid = false;
-        TargetAddr->SetIp(*TargetIPAddress, bIsValid);
-
-        if (!bIsValid)
-        {
-            UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid target IP: %s"), *TargetIPAddress);
-            return false;
-        }
-
-        TargetAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
-        Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
-
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to target: %s (Port: %d)"),
-            *UEnum::GetValueAsString(MessageType), *TargetIPAddress, SendPortNumber);
+        bSendSuccess = SendToSpecificIP(MessageData, TargetIPAddress, BytesSent,
+            FString::Printf(TEXT("Target (%s)"), *TargetIPAddress));
     }
-    // Use multicast if multicast group is set
-    else if (!MulticastGroupAddress.IsEmpty())
-    {
-        TSharedRef<FInternetAddr> MulticastAddr = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr();
-        bool bIsValid = false;
-        MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
-
-        if (!bIsValid)
-        {
-            UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid multicast group: %s"), *MulticastGroupAddress);
-            return false;
-        }
-
-        MulticastAddr->SetPort(SendPortNumber);  // 올바른 타겟 포트 사용
-        Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
-
-        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent %s message to multicast group: %s (Port: %d)"),
-            *UEnum::GetValueAsString(MessageType), *MulticastGroupAddress, SendPortNumber);
-    }
+    // 4. 최후 수단: 브로드캐스트
     else
     {
-        UE_LOG(LogTimecodeNetwork, Error, TEXT("No target IP or multicast group specified"));
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("No transmission target specified. Message will not be sent."));
         return false;
     }
 
-    return BytesSent == MessageData.Num();
+    return bSendSuccess && (BytesSent == MessageData.Num());
+}
+
+// 특정 IP로 메시지 전송 헬퍼 함수
+bool UTimecodeNetworkManager::SendToSpecificIP(const TArray<uint8>& MessageData, const FString& IPAddress,
+    int32& BytesSent, const FString& TargetName)
+{
+    ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+    TSharedRef<FInternetAddr> TargetAddr = SocketSubsystem->CreateInternetAddr();
+
+    bool bIsValid = false;
+    TargetAddr->SetIp(*IPAddress, bIsValid);
+
+    if (!bIsValid)
+    {
+        UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid IP address: %s"), *IPAddress);
+        return false;
+    }
+
+    TargetAddr->SetPort(SendPortNumber);
+    bool bSendSuccess = Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *TargetAddr);
+
+    if (bSendSuccess)
+    {
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent message to %s (Port: %d)"),
+            *TargetName, SendPortNumber);
+    }
+    else
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Failed to send message to %s"), *TargetName);
+    }
+
+    return bSendSuccess;
+}
+
+// 멀티캐스트 그룹으로 메시지 전송 헬퍼 함수
+bool UTimecodeNetworkManager::SendToMulticastGroup(const TArray<uint8>& MessageData, int32& BytesSent)
+{
+    ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+    TSharedRef<FInternetAddr> MulticastAddr = SocketSubsystem->CreateInternetAddr();
+
+    bool bIsValid = false;
+    MulticastAddr->SetIp(*MulticastGroupAddress, bIsValid);
+
+    if (!bIsValid)
+    {
+        UE_LOG(LogTimecodeNetwork, Error, TEXT("Invalid multicast address: %s"), *MulticastGroupAddress);
+        bMulticastEnabled = false; // 잘못된 주소이므로 멀티캐스트 비활성화
+        return false;
+    }
+
+    MulticastAddr->SetPort(SendPortNumber);
+    bool bSendSuccess = Socket->SendTo(MessageData.GetData(), MessageData.Num(), BytesSent, *MulticastAddr);
+
+    if (bSendSuccess)
+    {
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Sent message to multicast group: %s (Port: %d)"),
+            *MulticastGroupAddress, SendPortNumber);
+    }
+    else
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Failed to send message to multicast group: %s"),
+            *MulticastGroupAddress);
+
+        // 멀티캐스트 전송 실패 시 비활성화하고 다음번에 유니캐스트로 시도
+        bMulticastEnabled = false;
+    }
+
+    return bSendSuccess;
 }
 
 bool UTimecodeNetworkManager::SendEventMessage(const FString& EventName, const FString& Timecode)
@@ -493,6 +531,7 @@ bool UTimecodeNetworkManager::JoinMulticastGroup(const FString& MulticastGroup)
         return false;
     }
 
+    // 멀티캐스트 그룹 주소 유효성 확인
     ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
     TSharedRef<FInternetAddr> GroupAddr = SocketSubsystem->CreateInternetAddr();
 
@@ -505,13 +544,29 @@ bool UTimecodeNetworkManager::JoinMulticastGroup(const FString& MulticastGroup)
         return false;
     }
 
-    if (!Socket->JoinMulticastGroup(*GroupAddr))
+    // 멀티캐스트 그룹 참여 시도
+    bool bJoinSuccess = Socket->JoinMulticastGroup(*GroupAddr);
+
+    if (!bJoinSuccess)
     {
-        UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to join multicast group: %s"), *MulticastGroup);
-        return false;
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Failed to join multicast group: %s - Falling back to unicast mode"), *MulticastGroup);
+
+        // 멀티캐스트 실패 시 유니캐스트 모드로 전환
+        bMulticastEnabled = false;
+
+        // 기본 타겟 IP 설정 (로컬호스트)
+        if (TargetIPAddress.IsEmpty())
+        {
+            TargetIPAddress = TEXT("127.0.0.1");
+            UE_LOG(LogTimecodeNetwork, Log, TEXT("Fallback to unicast mode with target IP: %s"), *TargetIPAddress);
+        }
+
+        return false; // 멀티캐스트 조인은 실패했지만 유니캐스트 모드로 계속 진행
     }
 
+    // 멀티캐스트 참여 성공
     MulticastGroupAddress = MulticastGroup;
+    bMulticastEnabled = true;
     UE_LOG(LogTimecodeNetwork, Log, TEXT("Joined multicast group: %s"), *MulticastGroup);
     return true;
 }
@@ -591,43 +646,94 @@ bool UTimecodeNetworkManager::CreateSocket()
 
 void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& DataPtr, const FIPv4Endpoint& Endpoint)
 {
-    // 스레드 안전성 강화
-    if (!DataPtr.IsValid() || DataPtr->Num() <= 0)
+    // 안전 체크
+    if (bIsShuttingDown || !IsValid(this) || !DataPtr.IsValid() || DataPtr->Num() <= 0)
     {
         return;
     }
 
-    // 스레드 안전을 위해 데이터 복사
+    // 메시지 크기 확인 (최소 필요 크기 검증)
+    const int32 MinValidSize = 10; // 최소 유효 크기
+    if (DataPtr->Num() < MinValidSize)
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Received undersized packet (%d bytes)"), DataPtr->Num());
+        return;
+    }
+
+    // 메시지 타입 직접 검사
+    uint8 MessageType = (*DataPtr)[0];
+    // 유효한 메시지 타입인지 확인 (0부터 4까지가 유효)
+    if (MessageType > 4) // ETimecodeMessageType의 최대값 (Command = 4)
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Invalid message type: %d"), MessageType);
+        return;
+    }
+
+    // 디버깅 로그
+    UE_LOG(LogTimecodeNetwork, Verbose, TEXT("UDP packet received from %s, size: %d bytes, type: %d"),
+        *Endpoint.ToString(), DataPtr->Num(), MessageType);
+
+    // 메시지 복사
     TArray<uint8> MessageData;
     MessageData.Append(DataPtr->GetData(), DataPtr->Num());
 
-    // 게임 스레드로 작업 디스패치 (약한 참조 사용)
-    TWeakObjectPtr<UTimecodeNetworkManager> WeakThis = this;
+    // 마지막 수신 시간 업데이트
+    LastMessageTime = FDateTime::Now();
 
-    // 게임 스레드에서 실행될 함수
-    auto ProcessDataOnGameThread = [WeakThis, MessageData, Endpoint]()
+    // 연결 복구 상태 업데이트
+    if (bConnectionLost)
+    {
+        UE_LOG(LogTimecodeNetwork, Log, TEXT("Connection restored"));
+        ResetConnectionStatus();
+    }
+
+    // 메인 스레드로 작업 예약
+    FGraphEventRef Task = FFunctionGraphTask::CreateAndDispatchWhenReady([this, MessageData]()
         {
-            if (WeakThis.IsValid())
+            // 메인 스레드에서 재검사
+            if (!IsValid(this) || bIsShuttingDown)
             {
-                // 메시지 역직렬화
-                FTimecodeNetworkMessage ReceivedMessage;
-                // FMemoryReader 대신 직접 TArray<uint8>를 전달
-                if (ReceivedMessage.Deserialize(MessageData))
+                return;
+            }
+
+            // 메시지 역직렬화
+            FTimecodeNetworkMessage ReceivedMessage;
+            if (ReceivedMessage.Deserialize(MessageData))
+            {
+                // 유효한 메시지 처리
+                bHasReceivedValidMessage = true;
+
+                // 메시지 처리 전 다시 유효성 검사
+                if (IsValid(this) && !bIsShuttingDown)
                 {
-                    UTimecodeNetworkManager* StrongThis = WeakThis.Get();
-                    StrongThis->bHasReceivedValidMessage = true;
-                    StrongThis->ProcessMessage(ReceivedMessage);
-                    StrongThis->OnMessageReceived.Broadcast(ReceivedMessage);
+                    ProcessMessage(ReceivedMessage);
+
+                    // 델리게이트 호출 전 유효성 검사
+                    if (IsValid(this) && !bIsShuttingDown && OnMessageReceived.IsBound())
+                    {
+                        OnMessageReceived.Broadcast(ReceivedMessage);
+                    }
                 }
             }
-        };
-
-    // 게임 스레드로 작업 전달
-    AsyncTask(ENamedThreads::GameThread, ProcessDataOnGameThread);
+            else
+            {
+                UE_LOG(LogTimecodeNetwork, Warning, TEXT("Failed to deserialize message"));
+            }
+        }, TStatId(), nullptr, ENamedThreads::GameThread);
 }
 
 void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Message)
 {
+    // 로그 추가
+    UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Processing message - Type: %d, SenderID: %s"),
+        (int32)Message.MessageType, *Message.SenderID);
+
+    // 안전 검사
+    if (bIsShuttingDown || !IsValid(this))
+    {
+        return;
+    }
+
     // 메시지 타입에 따른 처리
     switch (Message.MessageType)
     {
@@ -656,6 +762,20 @@ void UTimecodeNetworkManager::ProcessMessage(const FTimecodeNetworkMessage& Mess
         default:
             UE_LOG(LogTimecodeNetwork, Warning, TEXT("Unknown message type received"));
             break;
+    }
+
+    switch (Message.MessageType)
+    {
+    case ETimecodeMessageType::TimecodeSync:
+        // 처리 코드...
+        break;
+    case ETimecodeMessageType::Heartbeat:
+        UE_LOG(LogTimecodeNetwork, Verbose, TEXT("Received heartbeat from %s"), *Message.SenderID);
+        // 하트비트 처리...
+        break;
+    default:
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Unknown message type received: %d"), (int32)Message.MessageType);
+        break;
     }
 }
 
@@ -1158,4 +1278,126 @@ bool UTimecodeNetworkManager::SendModeChangeCommand(ETimecodeMode NewMode)
         UE_LOG(LogTimecodeNetwork, Error, TEXT("Failed to send mode change command"));
         return false;
     }
+}
+
+void UTimecodeNetworkManager::Tick(float DeltaTime)
+{
+    // 안전 검사
+    if (bIsShuttingDown || !IsValid(this) || !Socket)
+    {
+        return;
+    }
+
+    // 종료 중이면 무시
+    if (bIsShuttingDown)
+    {
+        return;
+    }
+
+    // 연결 상태 확인
+    CheckConnectionStatus(DeltaTime);
+
+    // 하트비트 전송 (마스터 모드인 경우)
+    if (bIsMasterMode && ConnectionState == ENetworkConnectionState::Connected)
+    {
+        // 2초마다 하트비트 전송
+        static float HeartbeatTimer = 0.0f;
+        HeartbeatTimer += DeltaTime;
+
+        if (HeartbeatTimer >= 2.0f)
+        {
+            SendHeartbeat();
+            HeartbeatTimer = 0.0f;
+        }
+    }
+}
+
+// 연결 상태 확인 함수
+// TimecodeNetworkManager.cpp
+// CheckConnectionStatus 함수 수정
+void UTimecodeNetworkManager::CheckConnectionStatus(float DeltaTime)
+{
+    // 안전 체크
+    if (bIsShuttingDown || !IsValid(this))
+    {
+        return;
+    }
+
+    // 모든 작업 전 소켓 유효성 검사
+    if (!Socket)
+    {
+        UE_LOG(LogTimecodeNetwork, Warning, TEXT("Socket is invalid, connection lost"));
+        SetConnectionState(ENetworkConnectionState::Disconnected);
+        return;
+    }
+
+    // 매우 간단한 슬레이브 연결 체크로 단순화
+    if (!bIsMasterMode && ConnectionState == ENetworkConnectionState::Connected)
+    {
+        FTimespan TimeSinceLastMessage = FDateTime::Now() - LastMessageTime;
+        if (TimeSinceLastMessage.GetTotalSeconds() > 15.0)
+        {
+            UE_LOG(LogTimecodeNetwork, Warning, TEXT("Connection to master lost"));
+            SetConnectionState(ENetworkConnectionState::Disconnected);
+        }
+    }
+}
+
+// 재연결 시도 함수
+bool UTimecodeNetworkManager::AttemptReconnection()
+{
+    ConnectionRetryCount++;
+
+    // 지수 백오프 적용: 재시도 간격을 점점 늘림
+    ConnectionRetryInterval = FMath::Min(ConnectionRetryInterval * 1.5f, MAX_RETRY_INTERVAL);
+
+    UE_LOG(LogTimecodeNetwork, Log, TEXT("Reconnection attempt %d of %d (next retry in %.1f seconds)"),
+        ConnectionRetryCount, MAX_RETRY_COUNT, ConnectionRetryInterval);
+
+    // 소켓 재생성 및 초기화
+    if (Socket)
+    {
+        ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+        if (SocketSubsystem)
+        {
+            Socket->Close();
+            SocketSubsystem->DestroySocket(Socket);
+            Socket = nullptr;
+        }
+    }
+
+    if (Receiver)
+    {
+        Receiver->Stop();
+        delete Receiver;
+        Receiver = nullptr;
+    }
+
+    // 소켓 다시 생성
+    if (CreateSocket())
+    {
+        // UDP 수신기 재설정
+        FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(100);
+        Receiver = new FUdpSocketReceiver(Socket, ThreadWaitTime, TEXT("TimecodeReceiver"));
+        if (Receiver)
+        {
+            Receiver->OnDataReceived().BindUObject(this, &UTimecodeNetworkManager::OnUDPReceived);
+            Receiver->Start();
+
+            UE_LOG(LogTimecodeNetwork, Log, TEXT("Socket reopened successfully during reconnection attempt"));
+            return true;
+        }
+    }
+
+    UE_LOG(LogTimecodeNetwork, Warning, TEXT("Reconnection attempt failed - socket creation error"));
+    return false;
+}
+
+// 연결 상태 리셋 함수
+void UTimecodeNetworkManager::ResetConnectionStatus()
+{
+    bConnectionLost = false;
+    ConnectionRetryCount = 0;
+    ConnectionRetryInterval = 1.0f;
+    ConnectionCheckTimer = 0.0f;
 }

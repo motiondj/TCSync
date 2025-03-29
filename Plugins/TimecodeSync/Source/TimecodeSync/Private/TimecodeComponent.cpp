@@ -120,26 +120,40 @@ void UTimecodeComponent::BeginPlay()
 
 void UTimecodeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // 종료 메시지 로깅
-    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component shutting down"), *GetOwner()->GetName());
+    // 먼저 실행 중지
+    bIsRunning = false;
 
-    // 실행 중이면 먼저 중지
-    if (bIsRunning)
+    // 모든 델리게이트 해제
+    if (NetworkManager)
     {
-        StopTimecode();
+        NetworkManager->OnTimecodeMessageReceived.RemoveDynamic(this, &UTimecodeComponent::OnTimecodeMessageReceived);
+        NetworkManager->OnNetworkStateChanged.RemoveDynamic(this, &UTimecodeComponent::OnNetworkStateChanged);
+        NetworkManager->OnRoleModeChanged.RemoveDynamic(this, &UTimecodeComponent::OnNetworkRoleModeChanged);
+
+        // 안전 플래그 설정
+        NetworkManager->bIsShuttingDown = true;
+
+        // 잠시 대기하여 진행 중인 콜백이 완료되도록 함
+        FPlatformProcess::Sleep(0.1f);
+
+        // 네트워크 종료
+        NetworkManager->Shutdown();
+        NetworkManager = nullptr;
     }
 
-    // Shutdown network - 추가 확인 없이 항상 호출
-    ShutdownNetwork();
-
-    UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Timecode component shutdown complete"), *GetOwner()->GetName());
-
+    // 부모 클래스 EndPlay 호출
     Super::EndPlay(EndPlayReason);
 }
 
 void UTimecodeComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    // 네트워크 매니저 업데이트 (추가)
+    if (NetworkManager)
+    {
+        NetworkManager->Tick(DeltaTime);
+    }
 
     // 타임코드가 실행 중일 때만 업데이트
     if (bIsRunning)

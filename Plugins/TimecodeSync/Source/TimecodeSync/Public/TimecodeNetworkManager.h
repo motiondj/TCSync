@@ -161,6 +161,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Network")
     void GetPLLStatus(double& OutPhase, double& OutFrequency, double& OutOffset) const;
 
+    /**
+     * 주기적 업데이트 (연결 상태 체크용)
+     * @param DeltaTime - 마지막 업데이트 이후 경과 시간
+     */
+    UFUNCTION(BlueprintCallable, Category = "Network")
+    void Tick(float DeltaTime);
+
+    // 안전한 종료를 위한 플래그
+    bool bIsShuttingDown;
+
 private:
     // UDP socket
     FSocket* Socket;
@@ -222,9 +232,6 @@ private:
     // Network state tracking
     bool bHasReceivedValidMessage = false;
 
-    // 대상 포트 번호
-    int32 SendPortNumber;
-
     // 전용 마스터 서버 관련 변수들
     bool bIsDedicatedMaster;   // 전용 마스터 서버 여부
 
@@ -247,6 +254,28 @@ private:
     double GetPLLCorrectedTime(double LocalTime) const;
     void InitializePLL();
 
-    // 종료 중인지 표시하는 플래그 추가
-    bool bIsShuttingDown;
+    // 멀티캐스트 활성화 상태 추적
+    bool bMulticastEnabled;
+
+    // 특정 IP로 메시지 전송 헬퍼 함수
+    bool SendToSpecificIP(const TArray<uint8>& MessageData, const FString& IPAddress,
+        int32& BytesSent, const FString& TargetName);
+
+    // 멀티캐스트 그룹으로 메시지 전송 헬퍼 함수
+    bool SendToMulticastGroup(const TArray<uint8>& MessageData, int32& BytesSent);
+
+    // 연결 관리 변수
+    float ConnectionCheckTimer;
+    int32 ConnectionRetryCount;
+    float ConnectionRetryInterval;
+    const float MAX_RETRY_INTERVAL = 5.0f;
+    const int32 MAX_RETRY_COUNT = 5;
+    bool bConnectionLost;
+    FDateTime LastMessageTime;
+
+    // 연결 상태 확인 함수
+    void CheckConnectionStatus(float DeltaTime);
+    bool AttemptReconnection();
+    void ResetConnectionStatus();
+
 };
