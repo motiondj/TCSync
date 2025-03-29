@@ -291,6 +291,18 @@ ENetworkConnectionState UTimecodeComponent::GetNetworkConnectionState() const
     return ConnectionState;
 }
 
+void UTimecodeComponent::ShutdownNetwork()
+{
+    if (NetworkManager)
+    {
+        NetworkManager->Shutdown();
+        NetworkManager = nullptr;
+        ConnectionState = ENetworkConnectionState::Disconnected;
+
+        UE_LOG(LogTimecodeComponent, Log, TEXT("[%s] Network shutdown"), *GetOwner()->GetName());
+    }
+}
+
 bool UTimecodeComponent::SetupNetwork()
 {
     // Shutdown existing network manager

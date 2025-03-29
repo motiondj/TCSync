@@ -585,8 +585,8 @@ void UTimecodeNetworkManager::OnUDPReceived(const FArrayReaderPtr& DataPtr, cons
             {
                 // 메시지 역직렬화
                 FTimecodeNetworkMessage ReceivedMessage;
-                FArrayReader TempReader(MessageData.GetData(), MessageData.Num());
-                if (ReceivedMessage.Deserialize(TempReader))
+                // FMemoryReader 대신 직접 TArray<uint8>를 전달
+                if (ReceivedMessage.Deserialize(MessageData))
                 {
                     UTimecodeNetworkManager* StrongThis = WeakThis.Get();
                     StrongThis->bHasReceivedValidMessage = true;
